@@ -1,8 +1,10 @@
 <?php
 
-namespace MapasAmfri;
+namespace CulturaViva;
 
 use MapasCulturais\App;
+
+#die;
 
 class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 {
