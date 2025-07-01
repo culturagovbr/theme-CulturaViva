@@ -9,20 +9,48 @@ $gray-700: #4E4E4E;
 $warning: #F07B07;
 $white: #FFFFFF;
 
+// COLORS THEME
+$aux1-dark:           #007070;
+$aux1-light:          #99FFFF;
+$aux1-pure:           #03FFFF;
+$aux2-dark:           #081609;
+$aux2-light:          #72CA77;
+$aux2-pure:           #2F7C33;
+$aux3-dark:           #1F0416;
+$aux3-light:          #E95DB7;
+$aux3-pure:           #9B156B;
+$helper-light:        #42B4FF;
+$high-dark:           #BBBBBB;
+$high-light:          #F5F5F5;
+$high-pure:           #FFFFFF;
+$low-dark:            #3D3D3D;
+$low-light:           #666666;
+$low-pure:            #1E1E1E;
+$primary-dark:        #6B4700;
+$primary-light:       #FFDB94;
+$primary-pure:        #FFAA00; 
+$secondary-dark:      #020408;
+$secondary-light:     #556EC8;
+$secondary-pure:      #223169; 
+$tertiary-dark:       #6E110D;
+$tertiary-light:      #F5ACA8;
+$tertiary-pure:       #E6322A;
+
+
 // Default lightness deltas
 $lightness-300: 25%;
 $lightness-700: 25%;
 
 // Brand colors
-$primary-500: #e21111;
+$primary-500: #9B156B;
 $secondary-500: #f38b43;
 
 // Entities colors
-$opportunities-500: #f38b43;
-$events-500:#242472;
-$agents-500:#e21111;
+$opportunities-500: #223169;
+$events-500:#FFAA00;
+$agents-500:#9B156B;
 $projects-500:#6a80bd;
-$spaces-500:#ecabab;
+$spaces-500:#223169;
 
 $seals-500: #c2b153;
 
@@ -42,13 +70,36 @@ $home-register: #ecabab;
 // $high-500: #FFFFFF;
 
 // // FONTS
-// $font-body: 'Open Sans', sans-serif;
-// $font-headings: 'Open Sans', sans-serif;
+$font-body: 'Raleway';
+$font-family-base:  'Raleway';
+$font-headings: 'Kodchasan';
+$font-family-highlight: 'Kodchasan';
+
+// // Font sizes
+$font-size-xxl:  3rem;      // 48px
+$font-size-lg:   2rem;      // 32px
+$font-size-md:   1.5rem;    // 24px
+$font-size-sm:   1.125rem;  // 18px
+$font-size-xs:   1rem;      // 16px
+$font-size-xxs:  0.875rem;  // 14px
+$font-size-xxxs: 0.75rem;   // 12px
+
+// // Font weights
+$font-weight-bold:    700;
+$font-weight-light:   300;  
+$font-weight-semibold:  600;
+$font-weight-regular: 400;
+$font-weight-extraBold: 900;
+
+// // Text Transform
+$text-transform-none:           none;
+$text-transform-lowercase: lowercase;
+$text-transform-uppercase: uppercase;
 
 // // Borders radius
-// $border-radius-xs: 4px;
-// $border-radius-sm: 8px;
-// $border-radius-pill: 64px;
+$border-radius-xs: 4px;
+$border-radius-sm: 8px;
+$border-radius-pill: 64px;
 
 // // Borders
 // $border-hairline: 1px solid;
@@ -62,6 +113,74 @@ $home-register: #ecabab;
 // $shadow-lv-1-up: 0px -4px 8px rgba(0, 0, 0, 0.16);
 
 @import '../../../BaseV2/assets-src/sass/theme-BaseV2';
+@import '0.settings/typography';  
+@import '0.settings/atoms';
+@import '0.settings/global';
+@import '2.components/agent-data2';
+@import '2.components/agent-table';
+@import '2.components/button';
+@import '2.components/container';
+@import '2.components/complaint-suggestion';
+@import '2.components/entity-actions';
+@import '2.components/entity-card';
+@import '2.components/entity-calendar';
+@import '2.components/entity-contact';
+@import '2.components/_entity-data';
+@import '2.components/entity-gallery';
+@import '2.components/entity-header';
+@import '2.components/entity-links';
+@import '2.components/entity-location';
+@import '2.components/entity-owner';
+@import '2.components/entity-profile';
+@import '2.components/entity-related-agents';
+@import '2.components/entity-seals';
+@import '2.components/entity-social-media';
+@import '2.components/entity-terms';
+@import '2.components/field';
+@import '2.components/files-list';
+@import '2.components/home';
+@import '2.components/home-cards';
+@import '2.components/home-charts';
+@import '2.components/home-developers';
+@import '2.components/home-entities';
+@import '2.components/main-header';
+@import '2.components/mc-breadcrumb';
+@import '2.components/mc-header-menu';
+@import '2.components/opportunity-evaluations-table';
+@import '2.components/opportunity-header';
+@import '2.components/opportunity-phase-header';
+@import '2.components/opportunity-phase-list-registrations';
+@import '2.components/opportunity-registrations-table';
+@import '2.components/opportunity-subscription-list';
+@import '2.components/panel';
+@import '2.components/point-description';
+@import '2.components/panel-sidebar';
+@import '2.components/point-subscription';
+@import '2.components/qualification-evaluation-form';
+@import '2.components/rcv-exit-form-modal';
+@import '2.components/rcv-registration-update';
+@import '2.components/rcv-send-question';
+@import '2.components/rcv-save-later-modal';
+@import '2.components/rcv-transfer-ownership';
+@import '2.components/rcv-export-spreadsheet';
+@import '2.components/rcv-pnab-subscription';
+@import '2.components/registration-actions';
+@import '2.components/registration-card';
+@import '2.components/registration-form';
+@import '2.components/registration-info';
+@import '2.components/search-filter';
+@import '2.components/share-links';
+@import '2.components/single-pnab';
+@import '2.components/stepper';
+@import '2.components/tabs-component';
+@import '2.components/timeline';
+@import 'layouts/main-footer';
+@import 'layouts/rcv-certificate';
+@import 'layouts/rcv-membership-term';
+@import 'layouts/single-data';
+@import 'pages/registrations';
+@import 'pages/static-page';
+@import 'pages/search';
 
 
 .lgpd-document {
@@ -127,5 +246,82 @@ $home-register: #ecabab;
 
     &__content {
         z-index: 1;
+    }
+}
+
+.panel-page__header-actions {
+    display: none;
+}
+
+.not-admin.controller-opportunity.action-edit {
+    & .mc-stepper-vertical {
+        & .button--text-danger,
+        & .button--delete {
+            display: none;
+        }
+
+        & .opportunity-evaluation-committee__cancel-invitation {
+            display: inline-flex;
+        }
+
+        & .add-phase,
+        & .phase-delete {
+            display: none;
+        }
+
+        .entity-field-datepicker__time,
+        .entity-field-datepicker__date {
+            opacity: .5;
+            pointer-events: none;
+
+            .calendar, 
+            .clock {
+                opacity: .5;
+                pointer-events: none;
+            }
+        }
+
+        .opportunity-data-collection {
+            .col-12 {
+                display: none;
+
+                &:first-child {
+                    display: block;
+                }
+            }
+        }
+
+        .opportunity-committee-groups {
+            & .tabs-component__header {
+                & .button {
+                    display: none;
+                }
+            }
+
+            &__edit-group,
+            &__multiple-evaluators {
+                display: none;
+            }
+        }
+        
+        .opportunity-enable-claim {
+            display: none;
+        }
+
+        .field.col-12 {
+            display: none;
+        }
+    }
+}
+
+
+.controller-seal {
+    &.action-single {
+        background-color: var(--mc-white);
+
+        .tabs-component__panels {
+            margin-bottom: 0;
+            background-color: var(--mc-white);
+        }
     }
 }

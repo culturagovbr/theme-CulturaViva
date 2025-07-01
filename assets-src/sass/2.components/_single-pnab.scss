@@ -1,0 +1,40 @@
+.single-pnab {
+
+    &__title {
+        align-items: center;
+        display: flex;
+
+        & > h2 {
+            font-family: $font-headings;
+            font-size: $font-size-xxl;
+            white-space: nowrap;
+        }
+    }
+
+    &__submit {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+
+        & > .button {
+            max-width: size(270) !important;
+        }
+    }
+
+    &__content{
+        .division-section{
+            border-top: size(1) solid #000;
+            margin-bottom: size(40);
+            margin-top: size(50);
+        }
+    }
+
+    .aside-col{
+        position: relative;
+        top: size(275);
+
+        @include mobile{
+            top: inherit;
+        }
+    }
+}

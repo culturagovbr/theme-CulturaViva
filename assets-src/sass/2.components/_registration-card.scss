@@ -1,0 +1,51 @@
+.registration-card {
+    .title {
+        font-family: $font-family-base;
+    }
+
+    &__footer {
+        .left {
+            display: flex;
+            gap: size(25) size(48);
+            flex-wrap: wrap;
+
+            .registerData {
+                gap: 4px;
+                display: flex;
+                flex-direction: column;
+
+                .title {
+                    color: var(--mc-low-500);                
+                    font-size: size(16);
+                    font-weight: 600;
+                    line-height: size(22);
+                    font-family: $font-family-base;
+                    margin: 0;
+                    text-transform: uppercase;
+                }
+                
+                .status-point {
+                    display: flex;
+                    gap: 8px;
+                    align-items: center;
+
+                    .data {
+                        color: var(--mc-low-500);  
+                        font-size: size(16);
+                        font-weight: 700;
+                        line-height: size(22);
+                        margin: 0;
+                    }
+    
+                    .point {
+                        width: 16px;          
+                        height: 16px;         
+                        background-color: black; 
+                        border-radius: 50%;
+                    }
+                }
+    
+            }
+        }
+    }
+}

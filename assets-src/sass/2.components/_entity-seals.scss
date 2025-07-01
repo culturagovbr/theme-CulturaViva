@@ -1,0 +1,14 @@
+@use '../0.settings/mixins' as *;
+
+.entity-seals {
+    &__seals--seal {
+        .seal-icon {
+            background-color: transparent;
+            border-radius: 50%;
+
+            .mc-avatar {
+                border-radius: 50%;
+            }
+        }
+    }
+}

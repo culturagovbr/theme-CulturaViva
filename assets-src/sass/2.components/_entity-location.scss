@@ -1,0 +1,56 @@
+.entity-location{
+    max-width: size(872);
+
+    &__title{
+        font-size: $font-size-md;
+        font-weight: $font-weight-bold;
+        position: relative;
+        top: size(35);
+
+        .mc-popover > .v-popper > .faq-info__button{
+            display: none;
+        }
+    }
+
+    &__address{
+        color: $low-dark;
+        font-family: $font-family-base;
+        font-size: $font-size-sm;
+        font-weight: $font-weight-bold;
+        margin-bottom: size(24);
+    }
+
+    .mc-map{
+        margin-bottom: size(48);
+    }
+    
+    .mc-map > .leaflet-container{
+        border-radius: $border-radius-sm;
+    }
+
+    &__title > label{
+        display: none;
+    }
+
+    &__address{
+        font-family: $font-family-base;
+        font-weight: 900;
+    }
+}
+
+.public-location{
+    &__field{
+        .field__group > .field__checkbox{
+            font-family: $font-family-base;
+            font-size: $font-size-xxs;
+            font-weight: 900;
+        }
+   } 
+}
+
+.mc-map{
+
+    &-cluster{
+        color: $agents-500;
+    }
+}

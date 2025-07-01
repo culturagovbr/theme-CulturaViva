@@ -1,0 +1,15 @@
+@use '../0.settings/mixins'as *;
+
+.qualification-evaluation-form {
+    
+    &__section {
+        &-non-eliminatory {
+            align-items: center;
+            background-color: var(--mc-danger-500);
+            color: var(--mc-white);
+            display: flex;
+            font-weight: var(--mc-font-bold);
+            padding: size(10);
+        }
+    }
+}

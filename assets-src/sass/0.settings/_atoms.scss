@@ -1,0 +1,53 @@
+@use '../0.settings/mixins' as *;
+
+.agent {
+    &__color {
+        color: var(--mc-agents-500);
+
+        &--dark {
+            color: var(--mc-agents-700);
+        }
+
+        &--light {
+            color: var(--mc-agents-300);
+        }
+    }
+
+    &__background {
+        background-color: var(--mc-agents-500);
+        color: var(--mc-white);
+    }
+
+    &__hover {
+        &:hover {
+            color: var(--mc-agents-500);
+        }
+
+        &--bg {
+            &:hover {
+                background-color: var(--mc-agents-500);
+            }
+        }
+    }
+
+    &__border {
+        border: var(--mc-border-hairline);
+        border-color: var(--mc-agents-500);
+
+        &--solid {
+            border: var(--mc-border-solid);
+            border-color: var(--mc-agents-500);
+        }
+
+        &--dark {
+            border: var(--mc-border-hairline);
+            border-color: var(--mc-agents-700);
+        }
+
+        &--light {
+            border: var(--mc-border-hairline);
+            border-color: var(--mc-agents-300);
+        }
+    }
+}
+

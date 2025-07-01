@@ -1,0 +1,161 @@
+@use '../0.settings/mixins' as *;
+
+.rcv-point-subscription {
+    gap: size(40) size(20);
+    max-width: 100%;
+
+    .title,
+    &__info .content__description,
+    &__subscription__card__button p,
+    &__subscription__card__button p span {
+        font-family: var(--mc-font-body);
+        color: $black;
+    }
+
+    .title {
+        font-size: $font-size-md;
+        font-weight: $font-weight-bold;
+        line-height: size(33);
+        margin: size(20) 0;
+    }
+
+    &__fields {
+        gap: size(20);
+    }
+
+    &__info .content__description {
+        font-size: $font-size-xs;
+        font-weight: $font-weight-regular;
+        line-height: size(25);
+        margin: 0;
+
+        @media (max-width: size(400)) {
+            padding: size(16) size(15);
+            overflow-wrap: break-word;
+        }
+    }
+
+    &__subscription {
+        display: flex;
+        flex-wrap: wrap;
+        gap: size(23);
+        justify-content: space-between;
+        max-width: 100%;
+        border-bottom: var(--mc-border-hairline);
+        padding-bottom: size(58);
+
+        @media (max-width: size(1182)) {
+            justify-content: center;
+        }
+
+        &__wrapper {
+            max-width: size(270);
+            min-width: size(229);
+            text-align: center;
+
+            .modal-content {
+                display: flex;
+                justify-content: space-between;
+                max-width: 100%;
+                width: size(752);
+                min-height: size(264);
+                text-align: start;
+                padding: size(32);
+            }
+
+            .modal__header, .modal__action {
+                padding: 0;
+            }
+
+            .modal__header {
+                align-items: flex-start;
+                
+                .iconify{
+                    font-size: size(25);
+                }
+            }
+
+            .modal__content {
+                padding: size(26) 0 size(41);
+            }
+
+            .modal__title {
+                font-size: var(--mc-font-size-md);
+            }
+        }
+
+        &__card {
+            &__open {
+                width: 100%;
+                height: size(104);
+                background-color: $aux3-pure;
+                text-align: center;
+
+                p {
+                    display: flex;
+                    flex-direction: column;
+                    font-weight: $font-weight-bold;
+                    color: $white;
+                    font-size: var(--mc-font-size-md);
+                    line-height: size(28);
+    
+                    span {
+                        color: $white;
+                        font-weight: $font-weight-regular;
+                        font-size: var(--mc-font-size-sm);
+                    }
+                }
+
+                &--color {
+                    background-color: $secondary-pure;
+                }
+            }
+
+            &__verify {
+                background-color: $aux3-pure;
+                color: $white;
+            }
+
+            &__cancel {
+                background-color: $white;
+                color: $low-light;
+                border: size(2) solid $high-dark;
+            }
+            
+            &__register {
+                background-color: $white;
+                color: $aux3-pure;
+                border: size(2) solid $aux3-pure;
+
+                &--color {
+                    background-color: $aux3-pure;
+                    color: $white;
+                }
+            }
+
+            &__buttons {
+                display: flex;
+                gap: size(24);
+            }
+
+            &__modal {
+                text-align: start;
+                padding: size(20) 0;
+                
+                p {
+                    line-height: size(27);
+                }
+            }
+
+        }
+
+        .card-description {
+            display: block;
+            margin-top: size(16);
+            font-size: $font-size-xxxs;
+            color: $black;
+            text-align: left;
+            line-height: size(22);
+        }
+    }
+}

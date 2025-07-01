@@ -1,0 +1,7 @@
+@use '../0.settings/mixins' as *;
+
+.rcv-export-spreadsheet{
+    left: size(24);
+    bottom: size(-57);
+    position: absolute;
+}

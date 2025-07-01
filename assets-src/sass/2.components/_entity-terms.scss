@@ -1,0 +1,36 @@
+.entity-terms{
+    .mc-multiselect{
+        width: 100%;
+
+        .mc-popover > .v-popper> button{
+            background-color: $opportunities-500;
+            border-color: $opportunities-500;
+        }
+    }
+   
+    .mc-multiselect > .mc-popover > .v-popper > .select-class{
+        border: size(1) solid $gray-500; 
+        border-radius: $border-radius-xs; 
+        color: $white;
+        cursor: pointer; 
+        height: size(48);
+        padding: size(8); 
+    }
+
+    .mc-tag-list{
+       
+        &__tagList{
+            .mc-tag-list__tag{
+                background-color: $opportunities-500;
+            }
+        }
+    }
+
+    &__header{
+        .mc-title{
+            font-family: $font-family-base;
+            font-size: $font-size-xxs;
+            font-weight: 900;
+        }
+    }
+}

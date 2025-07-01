@@ -1,0 +1,11 @@
+@use '../0.settings/mixins' as *;
+
+.agent-table {
+    .entity-table__show-columns {
+        padding: size(24);
+        
+        a {
+            padding: unset;
+        }
+    }
+}

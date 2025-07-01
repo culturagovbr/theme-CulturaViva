@@ -1,0 +1,48 @@
+.agent-data {
+
+    &__title{
+        font-family: $font-family-base;
+        font-size: $font-size-md;
+    }
+
+    &__fields {
+        gap: size(8);
+    }
+    
+    &__fields--field{
+        // display: flex;
+        gap: size(8);
+        // height: size(8);
+        display: flex;
+        width: 100%;
+        gap: size(10);
+        margin-bottom: 0;
+
+        @include mobile {
+            flex-direction: column;
+        }
+    }
+
+    &__fields--field > .title{
+        color: $gray-700;
+        font-family: $font-family-base;
+        font-size: $font-size-xs;
+        font-weight: $font-weight-bold;
+        min-width: fit-content;
+        margin-bottom: 0;
+    }
+
+    &__fields--field > .box{
+        background-color: transparent;
+        margin-top: 0;
+        padding: 0;
+        min-height: unset;
+    }
+
+    &__fields--field > .box > .box__content{
+        color: $gray-700;
+        font-family: $font-family-base;
+        font-size: $font-size-xs;
+        font-weight: $font-weight-regular;
+    }
+}

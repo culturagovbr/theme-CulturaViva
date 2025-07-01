@@ -1,0 +1,29 @@
+.entity-gallery {
+
+    &__title{
+        font-size: $font-size-md;
+        margin-top: size(32);
+    }
+
+    &__list > .entity-gallery__list--image > .entity-gallery__list--image-actions{
+        background-color: $gray-100;
+    }
+
+    &__list > .entity-gallery__list--video > .entity-gallery__list--video-actions{
+        background-color: $gray-100;
+    }
+
+    &__addNew > .mc-image-uploader > label > a{
+        background-color: $agents-500;
+        border: 1px solid $agents-500;
+        border-radius: $border-radius-pill;
+        color: $white;
+    }
+
+    &__addNew > .mc-popover > .v-popper > a {
+        background-color: $agents-500;
+        border: 1px solid $agents-500;
+        border-radius: $border-radius-pill;
+        color: $white;
+    }
+}
