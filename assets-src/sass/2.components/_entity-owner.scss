@@ -1,0 +1,38 @@
+.entity-owner{
+
+    &__owner--name{
+        line-height: 1.2;
+        margin-top: size(10);
+    }
+
+    & > a > .entity-owner__owner--name{
+        color: $spaces-500;
+        font-family: $font-family-base;
+        font-size: $font-size-sm;
+        font-weight: $font-weight-regular;
+    }
+
+    &__edit{
+        .mc-popover > .v-popper > .entity-owner__edit--btn{
+            background-color: $opportunities-500;
+            border: size(1) solid $opportunities-500;
+            border-radius: $border-radius-pill;
+            color: $white;
+            font-family: $font-family-base;
+            font-size: $font-size-xxxs;
+            padding: size(8) size(16);
+
+            .iconify--material-symbols{
+                display: none;
+            }
+        }
+    }
+}
+
+.single-opportunity{
+    .opportunity{
+        aside > .flex-container > .entity-related-agents{
+            display: none;
+        }
+    }
+}

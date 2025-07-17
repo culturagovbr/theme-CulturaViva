@@ -1,0 +1,118 @@
+@use '../0.settings/mixins' as *;
+
+.tabs-component{
+
+    &__header > .tabs-component__header--left > .tabs-component__buttons > .tabs-component__button {
+        &::after{
+            background-color: $agents-500;
+        }
+    }
+    
+    &__panels{
+        aside {
+            .entity-seals > .entity-seals__title{
+                font-family: $font-family-base !important;    
+            }
+        }
+
+        .tabs__info > .container > main {
+
+            .agent-data{
+                height: auto;
+                
+                &__fields{
+                    &--field{
+
+                       .title-organization{
+                            min-width: size(173);
+                        }
+
+                        .title-phone{
+                            min-width: size(136);
+                        }
+
+                    }
+                }
+            }
+        }
+
+    }
+
+    &__panels > .tab-component > .container{
+        .mc-card{
+            &__content{
+                .left > .v-bottom > .banner{
+                    font-family: $font-family-base;
+                    font-size: $font-size-xxs;
+                    font-weight: 900;
+                    min-width: size(168);
+                }
+
+                .left > .v-bottom > .grid-12 > .col-3 > .avatar{
+                    font-family: $font-family-base;
+                    font-size: $font-size-xxs;
+                    font-weight: 900;
+                    margin-bottom: size(8);
+                    min-width: size(168);
+                }
+            }
+
+            &__title{
+                display: flex;
+                flex-direction: column;
+                gap: size(24);
+
+                .field__title-sede{
+                    font-family: $font-family-base;
+                    font-weight: 900;
+                    margin-top: size(20);
+                    margin-bottom: size(4);
+                }
+
+                .radio-group{
+                    margin-bottom: size(40);
+                }
+
+                .radio-group > .radio-options{
+                    display: flex;
+
+                    & > p{
+                        margin-top: 0;
+                    }
+                }
+
+                .col-12 > .grid-12 > .field {
+                    .field__title{
+                        font-size: $font-size-xxs;
+                    }
+                }
+
+                .field__title {
+                    font-size: $font-size-xxs;
+                }
+            }
+
+
+        }
+
+        aside > .aside-container {
+            .mc-card {
+                padding: size(32) size(16);
+
+                &__content {
+                    .grid-12 > * {
+                        border-top: var(--mc-border-hairline);
+                        margin-top: size(20);
+                        padding-top: size(20);
+
+                        &:first-child {
+                            border-top: none;
+                            margin-top: 0;
+                            padding-top: 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

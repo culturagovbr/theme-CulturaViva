@@ -1,0 +1,11 @@
+@use '../0.settings/mixins' as *;
+
+.panel-nav {
+    &__line {
+        display: none;
+    }
+
+    ul {
+        padding: 0 0 size(8) 0;
+    }
+}

@@ -1,0 +1,30 @@
+.files-list{
+    &__title{
+        font-size: $font-size-md;
+        font-weight: $font-weight-bold;
+        margin-top: size(32);
+    }
+
+    & > ul > li > a > .agent__color{
+        color: $agents-500;
+    }
+
+    &__list{
+
+        & > li > .edit > .mc-popover > .v-popper > a{
+            color: $agents-500;
+        }
+
+        & > li > .edit{
+            background-color: $gray-100;
+            border-radius: $border-radius-xs;
+        }
+    }
+
+    .mc-popover > .v-popper > a {
+        background-color: $agents-500;
+        border-color: $agents-500;
+        border-radius: $border-radius-pill;
+        color: $white;
+    }
+}

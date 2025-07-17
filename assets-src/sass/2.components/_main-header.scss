@@ -1,0 +1,81 @@
+.main-header{
+    &__superior{
+        background-color: $agents-500;
+        height: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+        padding-top: 0.438rem;
+        display: none;
+
+        @include mobile{
+            padding: 0;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-top: 0.25rem;
+        }
+
+        &-progress{
+            padding-top: size(3);
+        }
+
+        &-content{
+        display: flex; 
+        justify-content: space-between;
+
+        &-link{
+            display: flex;
+            gap: 0.25rem;
+
+            @include mobile{
+                font-size: size(10);
+            }
+        }
+
+        &-arrow-left{
+            color: $events-500;
+        }
+
+        &-arrow-right{
+            color: $aux1-pure;
+        }
+
+        & > a{
+                align-items: center;
+                color: $white;
+                display: flex;
+                font-size: $font-size-xxs;
+                gap: 0.438rem;
+            }
+        }
+    }
+
+    .theme-logo{
+        &__logo{
+            &--img{
+                > img{
+                    max-height: size(87) !important;
+
+                    @include mobile{
+                        max-height: size(55) !important;
+                    }
+                }
+            }
+        }
+    }
+
+    &__content{
+        .mc-header-menu > li > .mc-header-menu--item {
+            width: size(90);
+
+            @include mobile{
+                width: inherit;
+            }
+        }
+    }
+}
+
+body.controller-site.action-index {
+    .main-header__superior {
+        display: block;
+    }
+}

@@ -1,0 +1,37 @@
+@use '../0.settings/mixins' as *;
+
+.button {
+    font-family: var(--mc-font-body);
+
+    &--delete {
+        color: var(--mc-primary-500);
+
+        &:hover {
+            color: var(--mc-white);
+            background-color: var(--mc-error);
+        }
+    }
+
+    &--blue {
+        background-color: var(--mc-opportunities-500);
+        border: size(2) solid var(--mc-opportunities-500);
+        color: var(--mc-high-500);
+
+        &:hover {
+            border-color: var(--mc-opportunities-700);
+            background-color: var(--mc-opportunities-700);
+        }
+
+        &-outline {
+            background-color: var(--mc-white);
+            border: size(2) solid var(--mc-opportunities-500);
+            color: var(--mc-opportunities-500);
+
+            &:hover {
+                border-color: var(--mc-opportunities-700);
+                background-color: var(--mc-opportunities-700);
+                color: var(--mc-high-500);
+            }
+        }
+    }
+}

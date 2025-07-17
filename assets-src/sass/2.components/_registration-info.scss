@@ -1,0 +1,64 @@
+@use '../0.settings/mixins'as *;
+
+.registration-info {
+    &__header {
+        justify-content: flex-start !important;
+        gap: size(10) size(40);
+        align-items: center;  
+        flex-wrap: wrap;
+    }
+
+    &__title {
+        margin: 0;
+    }
+
+    &__agent {
+        display: flex;
+        align-items: center;
+        gap: size(18);
+    }
+
+    &__agent-name {
+        font-size: var(--mc-font-size-sm);
+        font-weight: var(--mc-font-bold);
+        color: var(--mc-low-300);
+    }
+
+    &__data {
+        gap: size(8);
+    }
+
+    &__data-label {
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    &__data-info {
+        font-size: var(--mc-font-size-xs);
+        font-weight: var(--mc-font-bold);
+        
+        & > .mc-status {
+            margin: unset;
+        } 
+    }
+
+    &__footer {
+        justify-content: flex-start;
+
+        & > .sentDate {
+            color: var(--mc-gray-700);
+            font-size: var(--mc-font-size-xs);
+            font-weight: var(--mc-font-bold);
+        }
+    }
+
+    &__toggle-header {
+        display: flex;
+        gap: size(16);
+        align-items: center;
+        padding: size(10) 0;
+
+        .iconify {
+            font-size: size(24);
+        }
+    }
+}

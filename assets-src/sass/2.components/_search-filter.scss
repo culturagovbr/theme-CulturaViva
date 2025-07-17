@@ -1,0 +1,38 @@
+@use '../0.settings/mixins' as *;
+
+.search-filter {
+    &__filter {
+        padding: 0;
+
+        .form {
+            padding: 0 size(5) 0 size(16);
+
+            &__label {
+                width: 100%;
+                margin: 0;
+                padding: size(16);
+            }
+
+            .field:last-child {
+                margin: 0;
+            }
+        }
+
+        .clear-filter {
+            padding: size(16);
+            margin: 0;
+        }
+    }
+
+    &__filter-space-status {
+        display: none;
+    }
+
+    &__filter-space-types {
+        display: none;
+    }
+
+    &__filter {
+        margin-bottom: size(8);
+    }
+}

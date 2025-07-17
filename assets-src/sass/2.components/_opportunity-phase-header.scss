@@ -1,0 +1,7 @@
+@use '../0.settings/mixins'as *;
+
+.opportunity-phase-header {
+    &__date {
+        display: none;
+    }
+}

@@ -1,0 +1,75 @@
+.entity-calendar{
+    &__header{
+        display: flex;
+        gap: size(3);
+    }
+
+    &__title{
+        font-family: $font-family-base;
+        font-size: font-size-sm;
+        font-weight: $font-weight-bold;
+        margin-bottom: size(13);
+    }
+
+    &__cards{
+        display: flex;
+        flex-direction: column;
+        gap: size(16);
+        width: 100%;
+    }
+
+    &__card{
+        background: var(--mc-gray-100);
+        border-radius: $border-radius-sm;
+        width: 100%;
+        padding: size(23) size(16) size(16) size(16);
+    }
+
+    &__card-calendar, 
+    &__card-address{
+        display: grid;
+        grid-template-columns: size(16) 1fr;
+        gap: size(11);
+
+        .iconify {
+            font-size: size(16);
+            flex-basis: size(16);
+        }
+    }
+
+    &__card-title{
+        font-family: $font-family-base;
+        font-size: $font-size-sm;
+        font-weight: $font-weight-bold;
+        margin-bottom: size(15);
+    }
+
+    &__card-date, 
+    &__card-location{
+        font-family: $font-family-base;
+        font-size: $font-size-xxs;
+        font-weight: $font-weight-bold;
+        margin-bottom: size(18);
+    }
+
+    &__card-ticket{
+        display: flex;
+        gap: size(16);
+
+        .livre{
+            font-weight: $font-weight-bold;
+        }
+    }
+
+    &__card-ticket-classification {
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    .all-events{
+        background-color: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: $font-size-xxxs;
+        font-weight: $font-weight-bold;
+    }
+}

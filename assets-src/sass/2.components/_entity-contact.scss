@@ -1,0 +1,7 @@
+.entity-contact{
+    & > button{
+        background-color: $opportunities-500;
+        border-color: $opportunities-500;
+        padding: 8px 35px 10px 35px;
+    }
+}

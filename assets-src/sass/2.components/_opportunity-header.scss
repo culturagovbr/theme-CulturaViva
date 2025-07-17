@@ -1,0 +1,15 @@
+@use '../0.settings/mixins' as *;
+
+.opportunity-header {
+    &__content {
+        padding: size(67) size(16) size(92) !important;
+
+        .left {
+            align-items: center;
+
+            .title {
+                font-family: var(--mc-font-headings);
+            }
+        }
+    }
+}

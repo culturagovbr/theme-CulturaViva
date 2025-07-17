@@ -1,0 +1,54 @@
+@use '../0.settings/mixins' as *;
+
+.main-footer {
+    &__content {
+        .amaps {
+            display: grid;
+            grid-template-columns: size(30) 1fr;
+            gap: size(6);
+        }
+
+        &--logo{
+            
+            &-img{
+                
+                & > a{
+                    .theme-logo__logo--img > img{
+                        max-width: size(268);
+                        max-height: size(100) !important;
+                    }
+                }
+            }
+        }
+
+        &--links{
+            margin-top: size(62);
+        }
+
+        &--links > .main-footer__content--links-group{
+
+            & > li{
+                cursor: pointer;
+            }
+
+            &  > li > a{
+                font-weight: $font-weight-bold;
+
+                & > .icon-svg{
+                    width: 20px;
+                    height: 20px;
+                }
+            }
+
+            &  > li > .mail{
+                color: $agents-500;
+                margin-top: size(10);
+            }
+
+        }
+    }
+
+    &__reg {
+        background:$opportunities-500;
+    }
+}

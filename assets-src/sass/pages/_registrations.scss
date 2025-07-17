@@ -1,0 +1,35 @@
+@use '../0.settings/mixins' as *;
+
+.controller-registration {
+    .opportunity-header {
+        background-color: transparent !important;
+
+        &__content {
+            padding: size(67) size(16) size(40) !important;
+        }
+    }
+    
+    .registration {
+        &__title {
+            line-height: 1.35 !important;
+        }
+
+        &__content {
+            padding-top: 0;
+        }
+
+        &.edit {
+            .registration__steps {
+                box-shadow: unset;
+                margin-bottom: size(40);
+                padding: size(16) 0 size(8);
+            }
+        }
+    }
+
+    .container {
+        display: grid;
+        grid-template-columns: 1fr size(270);
+        gap: size(32) size(32);
+    }
+}

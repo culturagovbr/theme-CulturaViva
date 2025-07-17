@@ -1,0 +1,11 @@
+.entity-related-agents {
+
+    &__addNew {
+        .mc-popover>.v-popper>button {
+            background-color: $agents-500;
+            color: $white;
+            border-radius: $border-radius-pill;
+        }
+
+    }
+}

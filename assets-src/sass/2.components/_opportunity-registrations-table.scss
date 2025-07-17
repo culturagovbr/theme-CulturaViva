@@ -1,0 +1,11 @@
+@use '../0.settings/mixins' as *;
+
+.opportunity-registration-table {
+    .entity-table__show-columns {
+        padding: size(9) size(20);
+        
+        a {
+            padding: unset;
+        }
+    }
+}

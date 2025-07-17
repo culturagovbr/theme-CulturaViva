@@ -1,0 +1,18 @@
+.entity-social-media{
+    display: flex;
+    flex-direction: column;
+
+    &__edit{
+        height: size(661);
+        
+        &--link > .field > input{
+            border-color: $high-dark;
+            color: $high-dark;
+            color: var(--mc-low-700);
+
+            &::placeholder{
+                color: $high-dark;
+            }
+        }
+    }
+}

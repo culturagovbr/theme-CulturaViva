@@ -1,0 +1,26 @@
+@use '../0.settings/mixins' as *;
+
+.controller-panel {
+    &.action-agents,
+    &.action-spaces {
+        .panel-entity-card {
+            &__footer-actions {
+                .panel__entity-actions {
+                    display: none;
+                }
+            }
+        }  
+    }
+}
+
+.entity-card{
+    &__header{
+        .user-details{
+            .user-info{
+                & > span{
+                    display: none;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,23 @@
+@use '../0.settings/mixins' as *;
+
+.membership-term {
+    max-width: size(1170);
+    margin: size(32) auto size(50);
+    padding: size(32);
+    display: grid;
+    gap: size(20);
+    text-align: justify;
+
+    &__title {
+        text-align: center;
+    }
+
+    &__section {
+        display: grid;
+        gap: size(10);
+    }
+
+    ol {
+        margin: size(15) 0;
+    }
+}

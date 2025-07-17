@@ -1,0 +1,11 @@
+.rcv-pnab-subscription {
+    &__wrapper {
+        display: flex;
+        justify-content: center;
+
+        .button {
+            margin-bottom: size(16);
+            min-width: size(200);
+        }
+    }
+}

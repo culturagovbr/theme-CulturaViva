@@ -1,0 +1,30 @@
+@use '../0.settings/mixins' as *;
+
+.stepper {
+    .step {
+        &.passedby, &.active {
+            .count {
+                background-color: var(--mc-primary-500);
+            }
+        }
+
+        &.passedby {
+
+            &::before {
+                background: var(--mc-primary-500);
+            }
+        }
+
+        &.active {
+            &::before {
+                background: linear-gradient(to right, var(--mc-primary-500), var(--mc-primary-500) 50%, var(--mc-gray-300) 50%);
+            }
+
+            &:last-child {
+                &::before {
+                    background: var(--mc-primary-500);
+                }
+            }
+        }
+    }
+}

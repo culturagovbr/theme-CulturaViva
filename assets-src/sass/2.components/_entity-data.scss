@@ -1,0 +1,15 @@
+@use '../0.settings/mixins' as *;
+
+.entity-data {    
+    &__data {
+        align-items: center;
+        border-radius: var(--mc-border-radius-xs);
+        display: flex;
+        font-size: var(--mc-font-size-xs);
+        padding: size(8) 0;
+        min-height: unset;
+        background-color: unset;
+        font-weight: normal;
+        word-break: break-word;
+    }
+}
