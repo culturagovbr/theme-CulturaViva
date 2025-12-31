@@ -74,8 +74,8 @@ $today = new DateTime();
                                     <div class="registration-info__data-info"> 
                                         <mc-status v-if="entity.status == 0" status-name="<?= i::esc_attr_e('Não enviada') ?>"></mc-status>
                                         <mc-status v-if="entity.status == 1" status-name="<?= i::esc_attr_e('Enviada') ?>"></mc-status>
-                                        <mc-status v-if="entity.status == 10" status-name="<?= i::esc_attr_e('Selecionada') ?>"></mc-status>
-                                        <mc-status v-if="entity.status == 3" status-name="<?= i::esc_attr_e('Não selecionada') ?>"></mc-status>
+                                        <mc-status v-if="entity.status == 10" status-name="<?= i::esc_attr_e('Habilitado') ?>"></mc-status>
+                                        <mc-status v-if="entity.status == 3" status-name="<?= i::esc_attr_e('Inabilitado') ?>"></mc-status>
                                     </div>
                                 </div>
 
