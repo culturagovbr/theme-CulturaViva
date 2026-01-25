@@ -75,26 +75,32 @@ app.component('rcv-registration-update-type', {
         },
 
         stepTitle() {
-            switch (this.step) {
-                case 'type':
-                    return 'Informe o novo tipo da sua organização';
+            const global = useGlobalState();
 
-                case 'situacao-cadastral':
-                case 'natureza-juridica':
-                    return 'Ops!';
+            if (global.auth.isLoggedIn) {
+                switch (this.step) {
+                    case 'type':
+                        return 'Informe o novo tipo da sua organização';
 
-                case 'confirm':
-                    return 'CNPJ válido!';
-                
-                case 'get-cnpj':
-                    return "Informe o CNPJ da organização";
-                
-                case 'success':
-                    return 'Solicitação concluída';
+                    case 'situacao-cadastral':
+                    case 'natureza-juridica':
+                        return 'Ops!';
 
-                default:
-                    return 'Selecione a organização que você deseja alterar';
+                    case 'confirm':
+                        return 'CNPJ válido!';
+
+                    case 'get-cnpj':
+                        return "Informe o CNPJ da organização";
+
+                    case 'success':
+                        return 'Solicitação concluída';
+
+                    default:
+                        return 'Selecione a organização que você deseja alterar';
+                }
             }
+
+            return 'Ops! Você precisa estar logado';
         },
 
         query() {
@@ -192,7 +198,10 @@ app.component('rcv-registration-update-type', {
             let data = { 
                 cnpj: this.cnpj,
                 apiInfo: this.apiInfo,
-                registration: this.registrationInfo,
+                registration: {
+                    id: this.registrationInfo.id || this.registrationInfo._id,
+                    category: this.registrationInfo.category,
+                },
                 option: this.selectedOption,
             };
             

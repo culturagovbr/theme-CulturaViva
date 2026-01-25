@@ -80,16 +80,19 @@ $term_url = $app->createUrl('site', 'termoAdesao');
 
             <ul class="main-footer__content--links-group">
                 <li>
-                    <a href="<?= $app->createUrl('panel', 'index') ?>"><?php i::_e('Painel'); ?></a>
+                    <a href="<?= $app->createUrl('panel', 'index') ?>"><?php i::_e('Sobre'); ?></a>
                 </li>
-                <li v-if="global.enabledEntities.opportunities">
+                <li>
                     <a href="<?= $app->createUrl('site', 'comissoes') ?>"><?php i::_e('Comissão de Certificação'); ?></a>
                 </li>
-                <li v-if="global.enabledEntities.events">
+                <li>
                     <a href="<?= $app->createUrl('site', 'certificados') ?>"><?php i::_e('Critérios para certificação'); ?></a>
                 </li>
-                <li v-if="global.enabledEntities.agents">
-                    <a href="<?= $app->createUrl('site', 'certificados') ?>"><?php i::_e('Funções do Cadastro'); ?></a>
+                <li>
+                    <a href="<?= $app->createUrl('site', 'funcoes-do-cadastro') ?>"><?php i::_e('Funções do Cadastro'); ?></a>
+                </li>
+                <li>
+                    <a href="<?= $app->createUrl('site', 'perguntas-frequentes') ?>"><?php i::_e('Perguntas Frequentes'); ?></a>
                 </li>
                 <!-- <?php if (!($app->user->is('guest'))) : ?>
                     <li>

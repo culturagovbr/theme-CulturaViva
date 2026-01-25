@@ -55,6 +55,13 @@ app.component('rcv-entity-header', {
         sealCertifierIdPontao() {
             return $MAPAS.config.rcvEntityHeader.sealCertifierIdPontao
         },
+
+        filterSeals() {
+            const seals = this.entity?.seals ?? [];
+            const verifiedSeals = [this.sealCertifierIdPontao, this.sealCertifierIdPonto];
+            
+            return seals.filter(seal => verifiedSeals.includes(seal.sealId));
+        }
     },
     methods: {
         url (source) {

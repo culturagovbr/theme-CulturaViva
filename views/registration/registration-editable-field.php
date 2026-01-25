@@ -57,5 +57,5 @@ $this->breadcrumb = $breadcrumb;
         </h3>
     </div>
 
-    <rcv-registration-edition :entity="entity"></rcv-registration-edition>
+    <rcv-registration-edition editable-fields :entity="entity"></rcv-registration-edition>
 </div>

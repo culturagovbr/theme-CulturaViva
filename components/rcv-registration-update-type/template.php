@@ -30,15 +30,15 @@ $route = $app->createUrl('auth');
                                 <label class="input__label input__radioLabel">
                                     <input type="radio" name="organization" :value="registration.id" @change="saveRegistrationInfo(registration)">
                                     
-                                    <span v-if="registration.agentsData?.coletivo">
+                                    <span v-if="registration.relatedAgents?.coletivo?.[0]">
                                         <a :href="url(registration)" target="_blank">
-                                            #{{registration.id}}
-                                        </a> - {{registration.agentsData.coletivo.name || registration.agentsData.coletivo.nomeCompleto}} 
-                                        <small v-if="registration.agentsData.coletivo.cnpj">(CNPJ: {{registration.agentsData.coletivo.cnpj}})</small>
-                                        <small v-if="!registration.agentsData.coletivo.cnpj">(CNPJ não informado)</small>
+                                            #{{registration.id}} ({{registration.category}})
+                                        </a> - {{registration.relatedAgents.coletivo[0].name || registration.relatedAgents.coletivo[0].nomeCompleto}} 
+                                        <small v-if="registration.category != 'Ponto de Cultura (coletivo sem CNPJ)' && registration.relatedAgents.coletivo[0].cnpj">(CNPJ: {{registration.relatedAgents.coletivo[0].cnpj}})</small>
+                                        <small v-else>(CNPJ não informado)</small>
                                     </span>
 
-                                    <span v-if="!registration.agentsData?.coletivo">
+                                    <span v-if="!registration.relatedAgents?.coletivo?.[0]">
                                         <a :href="url(registration)" target="_blank">
                                             #{{registration.id}}
                                         </a> - <?= i::__('Sem agente relacionado') ?>
@@ -86,7 +86,7 @@ $route = $app->createUrl('auth');
         <div v-if="step=='get-cnpj'" class="rcv-registration-update__modal-content">
             <div class="field">
                 <input type="text" v-maska data-maska="##.###.###/####-##" v-model="cnpj"/>
-                <span v-if="invalidCNPJ" class="field__error"><?= i::__('As entidades que podem ser cadastradas como Ponto ou Pontão de Cultura devem ser sem fins lucrativos e estar com a situação cadastral ativa. As naturezas jurídicas aceitas são: 399-9, 306-9, 313-1, 323-9, 330-1, 322-0 e 214-3. Por favor, verifique seu CNPJ') ?></span>
+                <span v-if="invalidCNPJ" class="field__error"><?= i::__('Ops! Não foi possível fazer a consulta. Tente novamente mais tarde') ?></span>
             </div>
         </div>
         

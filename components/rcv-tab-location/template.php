@@ -51,7 +51,7 @@ $this->import('
                 </div>
 
                 <!-- Mapa -->
-                <div class="col-12">
+                <div v-if="entity.publicLocation" class="col-12">
                     <entity-map :entity="entity" :editable="false"></entity-map>
                 </div>
 

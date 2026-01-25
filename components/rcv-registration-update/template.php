@@ -10,7 +10,7 @@ use MapasCulturais\i;
 $route = $app->createUrl('auth');
 ?>
 
-<mc-modal classes="rcv-registration-update__modal" button-label="label do botão" title="<?= i::__('Selecione a organização que você deseja atualizar') ?>" ref="updateModal">
+<mc-modal classes="rcv-registration-update__modal" button-label="label do botão" :title="modalTitle" ref="updateModal">
     <template #default="modal">
         <div class="required-auth" v-if="!global.auth.isLoggedIn">
             <div>
@@ -23,16 +23,15 @@ $route = $app->createUrl('auth');
                 <div v-for="registration in registrations" :key="registration.id" class="field col-12">
                     <label class="input__label input__radioLabel">
                         <input type="radio" name="organization" :value="registration.id" @change="saveRegistrationInfo(registration)">
-
-                        <span v-if="registration.nome || registration.nomeCompleto || registration.cnpj">
+                        <span v-if="registration.relatedAgents['coletivo'][0].name || registration.relatedAgents['coletivo'][0].nomeCompleto || registration.relatedAgents['coletivo'][0].cnpj">
                             <a :href="url(registration)" target="_blank">
-                                #{{registration.id}}
-                            </a> - {{registration.nome || registration.nomeCompleto}} 
-                            <small v-if="registration.cnpj">(CNPJ: {{registration.cnpj}})</small>
-                            <small v-if="!registration.cnpj">(CNPJ não informado)</small>
+                                #{{registration.id}} ({{registration.category}})
+                            </a> - {{registration.relatedAgents['coletivo'][0].name || registration.relatedAgents['coletivo'][0].nomeCompleto}} 
+                            <small v-if="registration.category != 'Ponto de Cultura (coletivo sem CNPJ)' && registration.relatedAgents['coletivo'][0].cnpj">(CNPJ: {{registration.relatedAgents['coletivo'][0].cnpj}})</small>
+                            <small v-else>(CNPJ não informado)</small>
                         </span>
                         
-                        <span v-if="!registration.nome && !registration.nomeCompleto && !registration.cnpj">
+                        <span v-if="!registration.relatedAgents['coletivo'][0].name && !registration.relatedAgents['coletivo'][0].nomeCompleto && !registration.relatedAgents['coletivo'][0].cnpj">
                             <a :href="url(registration)" target="_blank">
                                 #{{registration.id}}
                             </a> - <?= i::__('Sem agente relacionado') ?>
@@ -46,7 +45,7 @@ $route = $app->createUrl('auth');
             </div>
         </div>
 
-        <mc-entities v-if="global.auth.isLoggedIn && isAdmin" type="registration" :query="query" select="relatedAgents" :limit="10" watch-query>
+        <mc-entities v-if="global.auth.isLoggedIn && isAdmin" type="registration" :query="query" select="category,relatedAgents" :limit="10" watch-query>
             <template #header="{entities}">
                 <form class="select-entity__form" @submit="entities.refresh(); $event.preventDefault();">
                     <input ref="searchKeyword" placeholder="Digite para pesquisar" v-model="entities.query['@keyword']" type="text" class="select-entity__form--input" name="searchKeyword" :placeholder="placeholder" @keyup="entities.refresh(500)" />
@@ -64,10 +63,10 @@ $route = $app->createUrl('auth');
                                 <input type="radio" name="organization" :value="registration.id" @change="saveRegistrationInfo(registration)">
                                 <span v-if="registration.relatedAgents?.['coletivo']?.[0]">
                                     <a :href="url(registration)" target="_blank">
-                                        #{{registration.id}}
+                                        #{{registration.id}} ({{registration.category}})
                                     </a> - {{registration.relatedAgents['coletivo'][0].name || registration.relatedAgents['coletivo'][0].nomeCompleto}} 
-                                    <small v-if="registration.relatedAgents['coletivo'][0].cnpj">(CNPJ: {{registration.relatedAgents['coletivo'][0].cnpj}})</small>
-                                    <small v-if="!registration.relatedAgents['coletivo'][0].cnpj">(CNPJ não informado)</small>
+                                    <small v-if="registration.category != 'Ponto de Cultura (coletivo sem CNPJ)' && registration.relatedAgents['coletivo'][0].cnpj">(CNPJ: {{registration.relatedAgents['coletivo'][0].cnpj}})</small>
+                                    <small v-else>(CNPJ não informado)</small>
                                 </span>
                                 <span v-if="!registration.relatedAgents?.['coletivo']?.[0]">
                                     <a :href="url(registration)" target="_blank">
@@ -97,7 +96,7 @@ $route = $app->createUrl('auth');
 
 
     <template #actions="modal">
-        <button :disabled="disableButton" class="button button--primary" :class="[{'disabled' : disableButton}]" @click="updateOrganization(modal)">
+        <button v-if="global.auth.isLoggedIn" :disabled="disableButton" class="button button--primary" :class="[{'disabled' : disableButton}]" @click="updateOrganization(modal)">
             <?= i::__('Confirmar') ?>
         </button>
 

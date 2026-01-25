@@ -68,7 +68,7 @@ $this->breadcrumb = [
                                         <entity-profile :entity="entity"></entity-profile>
                                     </div>
                                     <div class="col-9 sm:col-12 grid-12 v-bottom">
-                                        <entity-field :entity="entity" classes="col-12" prop="name" :max-length="100" label="<?php i::_e('Nome do Ponto ou Pontão de Cultura') ?>" disabled></entity-field>
+                                        <entity-field :entity="entity" classes="col-12" prop="name" :max-length="100" label="<?php i::_e('Nome do Ponto ou Pontão de Cultura') ?>" :disabled="!global.auth.is('admin')"></entity-field>
                                         <entity-field :entity="entity" classes="col-12" prop="site" ></entity-field>
                                     </div>
                                     <?php $this->applyTemplateHook('edit2-entity-info-taxonomie-area', 'before') ?>
@@ -97,7 +97,7 @@ $this->breadcrumb = [
                         </template>
                         <template #content>
                             <div class="grid-12">
-                                <entity-field :entity="entity" classes="col-12" prop="cnpj" label="CNPJ" disabled></entity-field>
+                                <entity-field :entity="entity" classes="col-12" prop="cnpj" label="CNPJ" :disabled="!global.auth.is('admin')"></entity-field>
                                 <entity-field :entity="entity" classes="col-9 sm:col-12" prop="nomeCompleto" label="<?php i::_e('Razão social') ?>" disabled></entity-field>
                                 <entity-field :entity="entity" classes="col-12" prop="emailPublico" label="<?= i::__('E-mail público') ?>"></entity-field>
                                 <entity-field :entity="entity" classes="col-12" prop="telefonePublico" label="<?= i::__('Telefone público com DDD') ?>"></entity-field>

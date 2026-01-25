@@ -74,20 +74,26 @@ app.component('rcv-transfer-ownership', {
         },
 
         modalTitle() {
-            switch (this.step) {
-                case 'transfer':
-                    return this.text('Selecione a organização que terá a representação alterada');
-                case 'reassign':
-                    return this.text('Selecione a pessoa que irá se tornar representante da organização');
-                case 'request':
-                    return this.text('Encontre a organização que você deseja solicitar a propriedade para se tornar representante');
-                case 'confirm-transfer':
-                case 'confirm-request':
-                    return this.text('Você confirma essa alteração?');
-                    
-                default:
-                    return this.text('Alteração de responsável pela organização');
+            const global = useGlobalState();
+
+            if (global.auth.isLoggedIn) {
+                switch (this.step) {
+                    case 'transfer':
+                        return this.text('Selecione a organização que terá a representação alterada');
+                    case 'reassign':
+                        return this.text('Selecione a pessoa que irá se tornar representante da organização');
+                    case 'request':
+                        return this.text('Encontre a organização que você deseja solicitar a propriedade para se tornar representante');
+                    case 'confirm-transfer':
+                    case 'confirm-request':
+                        return this.text('Você confirma essa alteração?');
+                        
+                    default:
+                        return this.text('Alteração de responsável pela organização');
+                }
             }
+
+            return 'Ops! Você precisa estar logado';
         },
 
         parent() {

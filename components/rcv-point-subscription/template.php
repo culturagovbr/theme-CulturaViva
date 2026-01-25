@@ -49,7 +49,7 @@ $this->import('
                             </div>
                             <div class="field">
                                 <input type="text" v-maska data-maska="##.###.###/####-##" v-model="cnpj" placeholder="Digite o CNPJ da instituição" class="cnpj-input" />
-                                <span v-if="invalidCNPJ" class="field__error"><?= i::__('As entidades que podem ser cadastradas como Ponto ou Pontão de Cultura devem ser sem fins lucrativos e estar com a situação cadastral ativa. As naturezas jurídicas aceitas são: 399-9, 306-9, 313-1, 323-9, 330-1, 322-0 e 214-3. Por favor, verifique seu CNPJ') ?></span>
+                                <span v-if="invalidCNPJ" class="field__error"><?= i::__('Ops! Não foi possível fazer a consulta. Tente novamente mais tarde') ?></span>
                             </div>
                         </div>
                     </template>
@@ -99,7 +99,7 @@ $this->import('
                     <template v-if="global.auth.isLoggedIn && invalidAgentType" #default>
                         <div class="rcv-point-subscription__subscription__card__modal">
                             <p>
-                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva.gov.br informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
+                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva@cultura.gov.br  informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
                             </p>
                         </div>
                     </template>
@@ -191,7 +191,7 @@ $this->import('
                     <template v-if="global.auth.isLoggedIn && invalidAgentType" #default>
                         <div class="rcv-point-subscription__subscription__card__modal">
                             <p>
-                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva.gov.br informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
+                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva@cultura.gov.br  informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
                             </p>
                         </div>
                     </template>
@@ -257,7 +257,7 @@ $this->import('
                             </div>
                             <div class="field">
                                 <input type="text" v-maska data-maska="##.###.###/####-##" v-model="cnpj" placeholder="Digite o CNPJ da instituição" class="cnpj-input" />
-                                <span v-if="invalidCNPJ" class="field__error"><?= i::__('As entidades que podem ser cadastradas como Ponto ou Pontão de Cultura devem ser sem fins lucrativos e estar com a situação cadastral ativa. As naturezas jurídicas aceitas são: 399-9, 306-9, 313-1, 323-9, 330-1, 322-0 e 214-3. Por favor, verifique seu CNPJ') ?></span>
+                                <span v-if="invalidCNPJ" class="field__error"><?= i::__('Ops! Não foi possível fazer a consulta. Tente novamente mais tarde') ?></span>
                             </div>
                         </div>
                     </template>
@@ -308,7 +308,7 @@ $this->import('
                     <template v-if="global.auth.isLoggedIn && invalidAgentType" #default>
                         <div class="rcv-point-subscription__subscription__card__modal">
                             <p>
-                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva.gov.br informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
+                                <?= i::__("Entre em contato com o suporte por meio do e-mail suporte.culturaviva@cultura.gov.br  informando que precisa atualizar o <strong>tipo de agente do seu cadastro.</strong>") ?>
                             </p>
                         </div>
                     </template>

@@ -11,6 +11,7 @@ $canUserControl = $app->view->canUserControlRCV();
 
 $this->import('
     entity-table
+    mc-alert
     mc-icon
     mc-export-spreadsheet
     mc-states-and-cities
@@ -24,6 +25,11 @@ $this->import('
             <div class="agent-table__actions">
                 <h4 class="bold"><?= i::__('Ações:') ?></h4>
                 <mc-export-spreadsheet :owner="owner" endpoint="entities" :params="{entityType: 'agent', query: spreadsheetQuery}" group="entities-spreadsheets"></mc-export-spreadsheet>
+                <mc-alert type="warning">
+                    <div>
+                        <?= i::__('Só serão exportados dados das organizações que permitiram sua divulgação.') ?>
+                    </div>
+                </mc-alert>
             </div>
         </template>
 
@@ -66,6 +72,19 @@ $this->import('
             {{entity.En_Pais || entity.paisPontaPontao || entity.pais}}
         </template>
 
+        <template #tipoPonto="{ entity }">
+        {{
+            (Array.isArray(entity.tipoPonto) ? entity.tipoPonto : [entity.tipoPonto])
+            .map(tipo =>
+                tipo === 'ponto_entidade' ? 'Ponto de Cultura (entidade com CNPJ)' :
+                tipo === 'pontao' ? 'Pontão de Cultura (entidade com CNPJ)' :
+                tipo === 'ponto_coletivo' ? 'Ponto de Cultura (coletivo sem CNPJ)' :
+                tipo
+            )
+            .join(', ')
+        }}
+        </template>
+
         <template #cepPontaPontao="{entity}">
             {{entity.En_CEP || entity.cepPontaPontao}}
         </template>
@@ -80,6 +99,10 @@ $this->import('
 
         <template #En_MunicipioPontaPontao="{entity}">
             {{entity.En_Municipio || entity.En_MunicipioPontaPontao}}
+        </template>
+
+        <template #En_EstadoPontaPontao="{entity}">
+            {{ entity.En_Estado || entity.En_EstadoPontaPontao}}
         </template>
 
         <template #seals="{entity}">

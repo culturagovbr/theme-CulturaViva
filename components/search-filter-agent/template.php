@@ -23,7 +23,7 @@ $this->import('
         <?= i::_e('Filtrar Pontos e Pontões') ?>
     </label>
     <div class="foundResults" v-if="count">
-        {{ count }} <?= i::__('Pontos e Pontões encontrados') ?>
+        {{ count }} <?= i::__('Pontos e Pontões encontrados com endereço') ?>
     </div>
     <form class="form scrollbar" @submit="$event.preventDefault()">
         <?php $this->applyTemplateHook('search-filter-agent', 'begin') ?>

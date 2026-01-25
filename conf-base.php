@@ -6,6 +6,9 @@ $_config = [
     'rcv.fieldQuestion' => env ('RCV_FIELD_QUESTION','field_22941'),
     'rcv.legalRepresentative' => env ('RCV_LEGAL_REPRESENTATIVE','field_22997'),
     'rcv.addLegalRepresentative' => env ('RCV_ADD_LEGAL_REPRESENTATIVE','field_22994'),
+    'rcv.nameCulturePoint' => env('RCV_NAME_CULTURE_POINT', 'field_22971'),
+    'rcv.namePontoColletivo' => env('RCV_NOME_PONTO_COLLETIVO', 'field_22969'),
+    'rcv.nomePontaoDeCultura' => env('RCV_NOME_PONTAO_DE_CULTURA', 'field_22976'),
     'rcv.postalCode' => env ('RCV_POSTAL_CODE','field_22966'),
     'rcv.addressSet' => env ('RCV_ADDRESS_SET','field_22897'),
     'rcv.state' => env ('RCV_STATE','field_22888'),
@@ -19,14 +22,15 @@ $_config = [
     'rcv.disableRegistrationUpdateButtons' => env('RCV_DISABLE_REGISTRATIONS_UPDATE_BUTTONS', false),
     'app.siteName' => env('RCV_SITE_NAME', 'Cultura Viva'),
     'rcv.email' => 'suporte.culturaviva@cultura.gov.br',
-    'rcv.seals' => env('RCV_SEALS', '6,101,105','106'),
+    'rcv.seals' => env('RCV_SEALS', '6,101,105,116,117'),
     'rcv.opportunityId' => env('RCV_OPPORTUNITY_ID', 5386),
     'rcv.disableTabs' => env('RCV_DISABLE_TABS', false),
     'rcv.disablePnabOpportunity' => env('RCV_DISABLE_PNAB_OPPORTUNITY', false),
+    'rcv.disableDataDashboard' => env('RCV_DISABLE_DATA_DASHBOARD', false),
     'rcv.pnabOpportunityId' => env('RCV_PNAB_OPPORTUNITY_ID', 5388),
-    'rcv.pnabOpportunityAttachmentId' => env('RCV_PNAB_OPPORTUNITY_ATTACHMENT_ID', ''),
+    'rcv.pnabOpportunityAttachmentId' => env('RCV_PNAB_OPPORTUNITY_ATTACHMENT_ID', '10428'),
     'rcv.pnabOpportunityUrl' => env('RCV_PNAB_OPPORTUNITY_URL', 'https://mapas-minc.testes.map.as/oportunidade/'),
-    'rcv.phantomUserId' => env('RCV_PHANTOM_USER_ID', 50),
+    'rcv.phantomUserId' => env('RCV_PHANTOM_USER_ID', 510680),
     'rcv.categoriesMap' => [
         'pontao' => 'Pontão de Cultura (entidade com CNPJ)',
         'ponto-entidade' => 'Ponto de Cultura (entidade com CNPJ)',
@@ -44,9 +48,10 @@ $_config = [
     'rcv.verificationSeals' => [
         'pontao' => env('RCV_SEAL_CERTIFIER_ID_PONTAO', '101'),
         'ponto' => env('RCV_SEAL_CERTIFIER_ID_PONTO', '6'),
-        'desativado' => env('RCV_SEAL_CERTIFIER_ID_DISABLED', '106'),
+        'desativado' => env('RCV_SEAL_CERTIFIER_ID_DISABLED', '116'),
     ],
     'rcv.importerSeal' => env('RCV_IMPORTER_SEAL', 105),
+    'rcv.waitingUpdateSeal' => env('RCV_WAITING_UPDATE_SEAL', 117),
     'rcv.apiReturnedFieldsUsed' => [ // Campo retornados da API que são salvos no cadastro já no retorno
         'nomeCompleto' => ['disable' => true, 'rfDataField' => 'nomeEmpresarial'],
         'emailPublico' => ['disable' => false, 'rfDataField' => 'correioEletronico'],
@@ -56,7 +61,12 @@ $_config = [
         'telefone1' => ['disable' => false, 'rfDataField' => 'telefones?.[0]'],
     ],
     'rcv.realizaAtividadesField' => env('RCV_REALIZA_ATIVIDADES_FIELD', ''),
-    'rcv.concorrendoEditalField' => env('RCV_CONCORRENDO_EDITAL_FIELD', ''),
+    'rcv.removeFileFields' => [
+        'rfc_10424',
+        'rfc_10415',
+        'rfc_10417',
+        'rfc_10418'
+    ],
     // textos customizados
     'text:search.agents.view(agent).title' => "PONTOS E PONTÕES DE CULTURA", 
     'text:search.agents.search-list.agents' => "Pontos e Pontões", 
@@ -98,6 +108,7 @@ $_config = [
     'text:view(single).registration_info__footer' => 'Cadastro realizado em',
     'text:registration-actions.registration_registrationEdit' => 'Ao enviar seu cadastro você afirma que concorda com os termos da',
     'text:opportunity.single.opportunity-subscription-list.subscription-list-subtitle' => ' ',
+    'text:entity-status.agent-status--draft' => 'Este agente está em modo de rascunho porque seu cadastro ainda está em análise. A publicação será feita automaticamente após a aprovação.',
 
     'rcv.SpreadsheetColumnsLabels' => [
         'singleUrl' => ['label' => 'Identificação e link para perfil', 'public' => true],
@@ -189,12 +200,14 @@ $_config = [
         'rcv_meses_media_ano_org' => ['label' => '22998 - Quantas pessoas, em média, participam das ações da organização POR ANO?', 'public' => false],
         'rcv_fomento_distrital' => ['label' => '#332 - Qual estado concorreu?', 'public' => false],
         'outrosSelos' => ['label' => 'Outros Selos', 'public' => true],
+        "location" => ["label" => "Localização"],
+        "publicLocation" => ["label" => "Localização Pública"],
     ],
 ];
 
 if(php_sapi_name() != "cli"){
 
-    $routes = $this->config['routes'];
+    $routes = $this->config['routes'] ?? [];
 
     $new_routes = [
         'novo-cadastro' => ['opportunity', $_config['rcv.opportunityId']],

@@ -341,19 +341,25 @@ app.component('rcv-point-subscription' , {
                     this.isLoading = false;
                     return;
                 } else {
-                    if (this.subscriptionType === 'ponto-coletivo') {
-                        _agent.tipoPonto = 'ponto_coletivo';
+
+                    // Garante que tipoPonto seja array
+                    if (!_agent.tipoPonto ) {
+                        _agent.tipoPonto = [];
                     }
-    
-                    if (this.subscriptionType === 'ponto-entidade') {
-                        _agent.tipoPonto = 'ponto_entidade';
+
+                    const tipoMap = {
+                        'ponto-coletivo': 'ponto_coletivo',
+                        'ponto-entidade': 'ponto_entidade',
+                        'pontao': 'pontao'
+                    };
+
+                    const typeSelected = tipoMap[this.subscriptionType];
+
+                    if (typeSelected && !_agent.tipoPonto.includes(typeSelected)) {
+                        _agent.tipoPonto.push(typeSelected);
                     }
-    
-                    if (this.subscriptionType === 'pontao') {
-                        _agent.tipoPonto = 'pontao';
-                    }
-    
-                    _agent.rcv_tipo = 'ponto';
+
+                     _agent.rcv_tipo = 'ponto';
                 }
     
                 if(this.subscriptionType != "ponto-coletivo") {

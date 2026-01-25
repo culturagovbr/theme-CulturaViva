@@ -2,6 +2,8 @@
 use \MapasCulturais\i;
 
 return [
+    'mailer.from' => 'suporte.culturaviva@cultura.gov.br',
+    
     /* Primeira linha do logo configurável */
     'logo.title' => 'Rede',
 
@@ -84,5 +86,66 @@ return [
                 'url_logout' => env('url_logout', 'https://sso.staging.acesso.gov.br/logout'),
             ]
         ]
+    ],
+    'Metabase' => [
+        'config' => [
+            'links' => [
+                'public' => [
+                    'title' => 'Painel Público',
+                    'link' => 'https://metabase.cultura.gov.br/public/dashboard/0e17670a-794a-4996-9e72-d134bfc34c02',
+                    'text' => 'Conheça as área de atuação e a distribuição geográfica dos Pontos e Pontões de Cultura',
+                ],
+                'admin' => [
+                    'permission' => function () {
+                        $app = \MapasCulturais\App::i();
+
+                        $opportunity = $app->repo('Opportunity')->find('5386');
+
+                        if ($app->user && $app->user->is('admin') || $opportunity->canUser('@control')) {
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    'title' => 'Painel de gestores',
+                    'link' => 'https://metabase.cultura.gov.br/public/dashboard/87726bf6-8df2-494a-beed-317b82f1102a',
+                    'text' => 'Acompanhe dos dados do Cadastro Nacional, as atualizações e o andamento das avaliações',
+                ],
+                'imports' => [
+                    'title' => 'Painel de Importação de Editais',
+                    'link' => 'https://metabase.cultura.gov.br/public/dashboard/703938c6-c3cc-4b53-8bbe-aa83bfcd168c',
+                    'text' => 'Acompanhe o Painel de importação dos Editais',
+               ],
+            ],
+            'cards' => [
+                'home' => [
+                    [
+                        'permission' => function () {
+                            $app = \MapasCulturais\App::i();
+                            if ($app->user && $app->user->is('admin')) {
+                                return true;
+                            }
+
+                            return false;
+                        },
+                        'label' => 'Organizações',
+                        'icon' => 'agent-2',
+                        'iconClass' => 'agent__color',
+                        'panelLink' => 'public',
+                        'data' => [
+                            [
+                                'label' => 'Total de organizações',
+                                'entity' => MapasCulturais\Entities\Agent::class,
+                                'query' => [
+                                    'type' => 'EQ(2)'
+                                ],
+                            ],
+                        ],
+                    ],
+                ]
+            ],
+
+        ],
     ]
+
 ];

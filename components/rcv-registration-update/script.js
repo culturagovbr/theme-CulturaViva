@@ -59,6 +59,11 @@ app.component('rcv-registration-update', {
 
             return query;
         },
+
+        modalTitle() {
+            const global = useGlobalState();
+            return global.auth.isLoggedIn ? 'Selecione a organização que você deseja atualizar' : 'Ops! Você precisa estar logado';
+        }
     },
     
     methods: {

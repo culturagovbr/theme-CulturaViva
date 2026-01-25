@@ -10,7 +10,12 @@ $this->layout = 'seal-relation';
 $ponto = $relation->owner;
 
 $creationDate = $relation->createTimestamp->format('d/m/Y');
-$updateDate = $ponto->updateTimestamp->format('d/m/Y');
+$updateDate = null;
+
+if($ponto->rcv_last_update_timestamp) {
+    $last_update = new \DateTime($ponto->rcv_last_update_timestamp);
+    $updateDate = $last_update->format('d/m/Y');
+}
 
 $address = "";
 $pais = $ponto->En_Pais ?: $app->config['app.defaultCountry'];

@@ -22,15 +22,28 @@ class ImportRegistrationsJob extends JobType
         $conn = $app->em->getConnection();
 
         $registration = $job->registration;
-
+        $app->clearHooks('entity(Registration).insert:finish');
+        Importer::$registration = $registration;
+        
         try {
             $conn->beginTransaction();
             $job_result = Importer::runImportRegistrationsJob($registration);
             Importer::sendEmails($job_result);
 
             $conn->commit();
-        } catch(\Exception $e) {
+        } catch(\Throwable $e) {
             Importer::sendEmailError($registration, $e);
+            $app->log->debug("Erro ao importar inscrições: {$e->getMessage()}");
+            $app->log->debug($e->getTraceAsString());
+
+            Importer::generateImporterLog($registration, "Erro ao importar inscrições: {$e->getMessage()}");
+            Importer::generateImporterLog($registration, "Stack trace: {$e->getTraceAsString()}");
+
+            Importer::updateImporterStatusFile($registration, [
+                'status' => 2,
+                'message' => $e->getMessage(),
+                'timestamp' => date('d-m-Y H:i:s')
+            ]);
             $conn->rollBack();
 
             $app->disableAccessControl();

@@ -66,10 +66,10 @@ $this->import('
                         <a :href="entity.site" target="_blank"><mc-icon :class="entity.__objectType+'__color'" name="link"></mc-icon>{{entity.site}}</a>
                     </div>
                     <div v-if="showField" class="lastSide">
-                        <mc-modal v-if="entity.seals.length > 1" title="Certificados">
+                        <mc-modal v-if="filterSeals.length > 1" title="Certificados">
                             <template #default="modal">
                                     <div class="entity-header__certificates">
-                                        <a v-for="seal in entity.seals" :href="seal.singleUrl" class="link">
+                                        <a v-for="seal in filterSeals" :href="seal.singleUrl" class="link">
                                             <div class="entity-header__certificate">
                                                 <div class="entity-header__certificate-image">
                                                     <div v-if="seal.files?.avatar" class="image">
@@ -89,7 +89,7 @@ $this->import('
                             </template>
                         </mc-modal>
 
-                        <template v-if="entity.seals.length == 1" v-for="seal in entity.seals">
+                        <template v-if="filterSeals.length == 1" v-for="seal in filterSeals">
                             <a :href="seal.singleUrl" class="button button--primary"><?= $this->text('certificateButton', i::__('Certificado')); ?> </a>
                         </template>
                     </div>

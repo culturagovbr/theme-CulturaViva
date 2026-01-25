@@ -43,6 +43,7 @@ app.component('rcv-deactivate-point', {
             organization: null,
             disableButton: true,
             loading: false,
+            opportunity: $MAPAS.config.rcvDeactivatePoint.opportunity
         };
     },
 
@@ -77,23 +78,27 @@ app.component('rcv-deactivate-point', {
         },
 
         stepTitle() {
-            switch (this.step) {
-                case 'message':
-                    return 'Desativação da organização'
-                case 'success':
-                    return 'Desativação solicitada'
-                default:
-                    return 'Selecione a organização que deseja desativar';
+            const global = useGlobalState();
+
+            if (global.auth.isLoggedIn) {
+                switch (this.step) {
+                    case 'message':
+                        return 'Desativação da organização'
+                    case 'success':
+                        return 'Desativação solicitada'
+                    default:
+                        return 'Selecione a organização que deseja desativar';
+                }
             }
+
+            return 'Ops! Você precisa estar logado';
         },
 
         query() {
             const query = {
-                '@select': 'id,name,cnpj', 
+                'opportunity': `EQ(${this.opportunity})`, 
                 '@permissions': '@control', 
-                '@order': 'id ASC', 
-                'type': 'EQ(2)', 
-                '@verified': 1
+                'status': 'EQ(10)',
             };
 
             return query;
@@ -147,8 +152,8 @@ app.component('rcv-deactivate-point', {
             }
         },
 
-        url(agent) {
-            return Utils.createUrl('agent', 'single', [agent.id]).toString();
+        url(registration) {
+            return Utils.createUrl('registration', 'single', [registration.id]).toString();
         },
     },
 });

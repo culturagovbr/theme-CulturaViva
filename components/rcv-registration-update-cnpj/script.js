@@ -43,6 +43,7 @@ app.component('rcv-registration-update-cnpj', {
             cnpj: '',
             invalidCNPJ: false,
             disableButton: true,
+            loading: false,
             situacaoCadastralError: '',
             apiInfo: null,
             opportunity: $MAPAS.config.rcvRegistrationUpdateCnpj.opportunity,
@@ -73,22 +74,31 @@ app.component('rcv-registration-update-cnpj', {
         },
 
         stepTitle() {
-            switch (this.step) {
-                case 'get-cnpj':
-                    return 'Informe o novo CNPJ da organização';
+            const global = useGlobalState();
 
-                case 'situacao-cadastral':
-                    return 'Situação cadastral inválida';
-
-                case 'natureza-juridica':
-                    return 'Sua organização não pode se inscrever no Cadastro Nacional de Pontos e Pontões da Cultura';
-
-                case 'confirm':
-                    return 'Deseja alterar o CNPJ para este verificado?';
-
-                default:
-                    return 'Selecione a organização que você deseja alterar o CNPJ';
+            if (global.auth.isLoggedIn) {
+                switch (this.step) {
+                    case 'get-cnpj':
+                        return 'Informe o novo CNPJ da organização';
+    
+                    case 'situacao-cadastral':
+                        return 'Situação cadastral inválida';
+    
+                    case 'natureza-juridica':
+                        return 'Sua organização não pode se inscrever no Cadastro Nacional de Pontos e Pontões da Cultura';
+    
+                    case 'confirm':
+                        return 'Deseja alterar o CNPJ para este verificado?';
+    
+                    case 'success':
+                        return 'Solicitação concluída';
+    
+                    default:
+                        return 'Selecione a organização que você deseja alterar o CNPJ';
+                }
             }
+
+            return 'Ops! Você precisa estar logado';
         },
 
         query() {
@@ -111,7 +121,7 @@ app.component('rcv-registration-update-cnpj', {
         },
 
         changeStep (step) {
-            const steps = ['get-cnpj', 'confirm', 'natureza-juridica', 'situacao-cadastral'];
+            const steps = ['get-cnpj', 'confirm', 'natureza-juridica', 'situacao-cadastral', 'success'];
             
             if (steps.includes(step)) {
                 this.step = step;
@@ -138,10 +148,12 @@ app.component('rcv-registration-update-cnpj', {
             let api = new API();
             let data = { cnpj: this.cnpj };
             
+            this.disableButton = true;
             api.POST(url, data).then(res => res.json()).then(data => {
                 returnApi = data?.data ?? data;
                 this.hasError = data?.error || false;
-
+                this.disableButton = true;
+                
                 if(!returnApi) {
                     this.invalidCNPJ = true;
                 } else if(returnApi == 'natureza-juridica-invalida') {
@@ -166,8 +178,12 @@ app.component('rcv-registration-update-cnpj', {
                 apiInfo: this.apiInfo
             };
             
+            this.loading = true;
+            this.disableButton = true;
             api.POST(url, data).then(res => res.json()).then(data => {
-                modal.close();
+                this.loading = false;
+                this.disableButton = false;
+                this.changeStep('success');
             })
         },
 

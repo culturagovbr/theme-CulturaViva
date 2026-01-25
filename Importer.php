@@ -4,6 +4,7 @@ namespace CulturaViva;
 require __DIR__ . "/ImportRegistrationsJob.php";
 
 use CulturaViva\JobTypes\ImportRegistrationsJob;
+use DateTime;
 use MapasCulturais\API;
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
@@ -44,6 +45,9 @@ use Respect\Validation\Validator as v;
  * 
  */
 class Importer {
+
+    public static Registration $registration;
+
     static $types = [
         'pontao' => [
             'Pontão',
@@ -96,7 +100,9 @@ class Importer {
 
         self::$theme = $theme;
 
-        $app->registerJobType(new ImportRegistrationsJob(ImportRegistrationsJob::SLUG));
+        if(!$app->getRegisteredJobType(ImportRegistrationsJob::SLUG)) {
+            $app->registerJobType(new ImportRegistrationsJob(ImportRegistrationsJob::SLUG));
+        }
 
         // Ao aprovar a inscrição agenda o job de importação das inscrições a partir da planilha enviada na inscrição
         $app->hook("entity(Registration).status(approved)", function() use ($app) {
@@ -241,8 +247,9 @@ class Importer {
             foreach($registrations as $registration) {
                 $coletivo = $registration->getRelatedAgents('coletivo');
                 $name = $coletivo[0]->name ?? null;
+                $coletivo_status = $coletivo[0]->status;
 
-                if (!empty($coletivo) && !empty($name) && !empty($row->organizacao_nome)) {
+                if (!empty($coletivo) && $coletivo_status >= 0 && !empty($name) && !empty($row->organizacao_nome)) {
                     if ($app->slugify($name) == $app->slugify($row->organizacao_nome)) {
                         return $registration;
                     }
@@ -264,8 +271,32 @@ class Importer {
 
             foreach($registrations as $registration) {
                 $coletivo = $registration->getRelatedAgents('coletivo');
+                $coletivo_status = $coletivo ? $coletivo[0]->status : null; 
 
-                if ($app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome) && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)) {
+                if($registration->owner->status < 0) {
+                    $user = $registration->owner->user;
+
+                    if($user && $user->status <= 0) {
+                        continue;
+                    }
+
+                    $app->disableAccessControl();
+                    $agent = new Agent();
+                    $agent->user = $user;
+                    $agent->name = $row->responsavel_nome;
+                    $agent->type = 1;
+                    $agent->status = Agent::STATUS_ENABLED;
+                    $agent->save();
+
+                    $registration->owner = $agent;
+                    $registration->save();
+
+                    $user->profile = $agent;
+                    $user->save();
+                    $app->enableAccessControl();
+                }
+
+                if ($coletivo && $coletivo_status >= 0 && $app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome) && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)) {
                     return $registration;
                 }
             }
@@ -283,30 +314,60 @@ class Importer {
         $app = App::i();
 
         $cpf_query = new ApiQuery(Agent::class, [
-            'cpf' => API::EQ($row->responsavel_cpf),
+            'cpf' => API::OR(API::EQ($row->responsavel_cpf), API::EQ(preg_replace('/[-\.]/', '', $row->responsavel_cpf))),
             'type' => API::EQ(1)
         ]);
 
         $owner_ids = $cpf_query->findIds();
+        $valid_owner_ids = [];
+
+        foreach($owner_ids as $owner_id) {
+            $owner = $app->repo('Agent')->find($owner_id);
+
+            if($owner && $owner->status < 0) {
+                $app->disableAccessControl();
+                $owner->cpf = null;
+                $owner->save();
+                $app->enableAccessControl();
+                continue;
+            }
+
+            $valid_owner_ids[] = $owner_id;
+        }
 
         if($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
             $query = new ApiQuery(Agent::class, [
                 'name' => API::ILIKE($row->organizacao_nome),
-                'parent' => API::IN($owner_ids),
-                'type' => API::EQ(2)
+                'parent' => API::IN($valid_owner_ids),
+                'type' => API::EQ(2),
+                'status' => API::GTE(0)
             ]);
+            $ids = $query->findIds();
         } else {
-            $query = new ApiQuery(Agent::class, [
-                'cnpj' => API::EQ($row->organizacao_cnpj),
-                'parent' => API::IN($owner_ids),
-                'type' => API::EQ(2)
+            $query1 = new ApiQuery(Agent::class, [
+                'cnpj' => API::OR(API::EQ($row->organizacao_cnpj), API::EQ(preg_replace('/[-\.\/]/', '', $row->organizacao_cnpj))),
+                'parent' => API::IN($valid_owner_ids),
+                'type' => API::EQ(2),
+                'status' => API::GTE(0)
             ]);
+            $query2 = new ApiQuery(Agent::class, [
+                'name' => API::ILIKE($row->organizacao_nome),
+                'parent' => API::IN($valid_owner_ids),
+                'type' => API::EQ(2),
+                'status' => API::GTE(0)
+            ]);
+            $ids = array_merge($query1->findIds(), $query2->findIds());
         }
 
-        $ids = $query->findIds();
 
         /** @var Agent */
         $agent = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
+
+        // Verifica se o tipo de ponto na planilha é diferente de ponto coletivo e caso a organização não tenha cnpj, insere
+        if($agent && !$agent->cnpj && $row->ponto_tipo != $app->config['rcv.categoriesMap']['ponto-coletivo']) {
+            $agent->cnpj = $row->organizacao_cnpj;
+            $agent->save();
+        }
 
         return $agent;
     }
@@ -321,18 +382,29 @@ class Importer {
         $app = App::i();
 
         if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
-            $query = new ApiQuery(Agent::class, [
-                'name' => API::ILIKE($row->organizacao_nome),
-                'type' => API::EQ(2)
+            $registration_query = new ApiQuery(Registration::class, [
+                '@keyword' => $row->organizacao_nome,
+                '@select'  => 'relatedAgents',
+                'opportunity' => API::EQ($app->config['rcv.opportunityId'])
             ]);
+
+            $registrations = $registration_query->find();
+            $ids = array_map(fn($r) => $r['relatedAgents']['coletivo'][0]['id'], $registrations);
         } else {
             $query = new ApiQuery(Agent::class, [
-                'cnpj' => API::EQ($row->organizacao_cnpj),
+                'cnpj' => API::OR(API::EQ($row->organizacao_cnpj), API::EQ(preg_replace('/[-\.\/]/', '', $row->organizacao_cnpj))),
                 'type' => API::EQ(2)
             ]);
+            $ids = $query->findIds();
         }
 
-        $ids = $query->findIds();
+        
+        $organizations = $app->repo('Agent')->findBy(['id' => $ids]);
+        foreach($organizations as $org) {
+            if (Utils::formatCnpjCpf($org->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)) {
+                return null;
+            }
+        }
 
         /** @var Agent */
         $organization = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
@@ -341,8 +413,18 @@ class Importer {
             return null;
         }
 
-        if (isset($organization->owner) && $organization->owner->type->id != 1) {
+        if($organization->status < 0) {
             return null;
+        }
+
+        $owner = $organization->owner;
+
+        if ($owner && $owner->type->id != 1) {
+            return null;
+        }
+
+        if(!$organization->owner->cpf && $organization->owner->name != $row->responsavel_nome) {
+            return $organization;
         }
 
         if (!v::cpf()->validate($organization->owner->cpf)) {
@@ -365,14 +447,30 @@ class Importer {
         $app = App::i();
 
         $query = new ApiQuery(Agent::class, [
-            'cpf' => API::EQ($row->responsavel_cpf),
+            'cpf' => API::OR(API::EQ($row->responsavel_cpf), API::EQ(preg_replace('/[-\.]/', '', $row->responsavel_cpf))),
             'type' => API::EQ(1)
         ]);
 
         $ids = $query->findIds();
 
+        $valid_owner_ids = [];
+
+        foreach($ids as $id) {
+            $owner = $app->repo('Agent')->find($id);
+
+            if($owner && $owner->status < 0) {
+                $app->disableAccessControl();
+                $owner->cpf = null;
+                $owner->save();
+                $app->enableAccessControl();
+                continue;
+            }
+
+            $valid_owner_ids[] = $id;
+        }
+
         /** @var Agent */
-        $agent = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
+        $agent = $app->repo('Agent')->findOneBy(['id' => $valid_owner_ids], ['updateTimestamp' => 'DESC']);
 
         return $agent;
     }
@@ -393,6 +491,7 @@ class Importer {
         $registration->opportunity = $opportunity;
         $registration->owner = $organization->parent;
         $registration->category = $row->ponto_tipo;
+        $registration->range = $app->config['rcv.rangesMap']['cadastro-via-edital'];
         $registration->status = Registration::STATUS_DRAFT;
 
         if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
@@ -401,7 +500,7 @@ class Importer {
             $registration->proponentType = 'Pessoa Jurídica';
         }
 
-        $registration->save(true);
+        $registration->save();
 
         $registration->createAgentRelation($organization, 'coletivo');
 
@@ -416,7 +515,8 @@ class Importer {
      */
     static function createOrganization(object $row, Agent $owner): Agent {
         $app = App::i();
-
+       
+        $type_selected = self::getTypeDict($row->ponto_tipo);
         $organization = new Agent();
         $organization->type = 2;
         $organization->parent = $owner;
@@ -426,7 +526,8 @@ class Importer {
         $organization->En_Estado = $row->ponto_uf;
         $organization->En_Municipio = $row->ponto_municipio;
         $organization->rcv_tipo = "ponto";
-        $organization->save(true);
+        $organization->tipoPonto = [$type_selected];
+        $organization->save();
 
         return $organization;
     }
@@ -442,7 +543,7 @@ class Importer {
         $user->email = $row->responsavel_email;
         $user->authProvider = "0";
         $user->authUid = $row->responsavel_email;
-        $user->save(true);
+        $user->save();
 
         $owner = new Agent();
         $owner->user = $user;
@@ -451,10 +552,10 @@ class Importer {
         $owner->cpf = $row->responsavel_cpf;
         $owner->emailPrivado = $row->responsavel_email;
         $owner->telefonePrivado = $row->responsavel_telefone;
-        $owner->save(true);
+        $owner->save();
 
         $user->profile = $owner;
-        $user->save(true);
+        $user->save();
 
         return $owner;
     }
@@ -470,7 +571,7 @@ class Importer {
      *   scenario: int|float
      * }
      */
-    public static function processRow(object $row) {
+    public static function processRow(object $row, Registration $pnab_registration) {
         $app = App::i();
 
         $result = [
@@ -481,8 +582,24 @@ class Importer {
         ];
 
         $scenario = null;
+    
+        $row->responsavel_cpf = Utils::formatCnpjCpf(trim($row->responsavel_cpf));
+        $row->organizacao_cnpj = $row->organizacao_cnpj ? Utils::formatCnpjCpf(trim($row->organizacao_cnpj)) : null;
+        $row->organizacao_nome = trim($row->organizacao_nome);
 
-        if ($registration = self::findRegistrationByRow($row)) {
+        foreach ($row as $key => $value) {
+            if (is_string($value) && preg_match('/\r\n|\r|\n/', $value)) {
+                $row->$key = preg_replace('/\r\n|\r|\n/', ' ', $value);
+            }
+        }
+
+        if ($organization = self::findOrganizationFromOtherAgent($row)) {
+            $app->log->debug("Cenário 5 - encontrou a organização e compara o CPF do parent com o CPF da planilha");
+
+            $result['organization'] = $organization;
+            $registration = $organization->rcv_registration;
+            $scenario = 5;
+        } else if ($registration = self::findRegistrationByRow($row)) {
             $app->log->debug("Cenário 1 - encontrou e aprova a inscrição - {$registration->number}");
             $scenario = 1;
         } else if ($organization = self::findOrganizationByRow($row)) {
@@ -495,52 +612,99 @@ class Importer {
 
             $organization = self::createOrganization($row, $owner);
             $registration = self::createRegistration($row, $organization);
+            $organization->rcv_registration = $registration;
+            $organization->save();
             $result['organization'] = $organization;
             $result['owner'] = $owner;
             $scenario = 3.1;
-        } else if ($organization = self::findOrganizationFromOtherAgent($row)) {
-            $app->log->debug("Cenário 5 - encontrou a organização e compara o CPF do parent com o CPF da planilha");
-
-            $result['organization'] = $organization;
-            $registration = $organization->rcv_registration;
-            $scenario = 5;
         } else {
-            $app->log->debug("Cenário 3.2 - não encontrou nada, cria o proprietário, a organização e a inscrição");
+            $app->log->debug("Cenário 4 - não encontrou nada, cria o proprietário, a organização e a inscrição");
 
             $owner = self::createOrganizationOwner($row);
             $organization = self::createOrganization($row, $owner);
             $registration = self::createRegistration($row, $organization);
+            $organization->rcv_registration = $registration;
+            $organization->save();
             $result['organization'] = $organization;
             $result['owner'] = $owner;
-            $scenario = 3.2;
+            $scenario = 4;
         }
 
         if($scenario != 5) {
             if($seal = $app->repo('Seal')->find($app->config['rcv.importerSeal'])) {
                 $has_seal = false;
+                $has_waiting_update_seal = false;
     
                 $organization = $scenario == 1 ? $app->repo('Agent')->find($registration->relatedAgents['coletivo'][0]->id) : $organization;
                 
+                if(!in_array($scenario, [3.1, 4])) {
+                    $type_selected = self::getTypeDict($row->ponto_tipo);
+
+                    $organization->tipoPonto = Importer::ensureTypeInArray($type_selected, $organization->tipoPonto);
+                    $organization->save();
+                }
+                
+                $waiting_update_seal = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
+
                 $seal_relations = $organization->getSealRelations();
     
                 foreach($seal_relations as $seal_relation) {
+                    if($seal_relation->seal->id == $waiting_update_seal->id) {
+                        $has_waiting_update_seal = true;
+                    }
+
                     if($seal_relation->seal->id == $seal->id) {
                         $has_seal = true;
-                        break;
                     }
                 }
     
+                // Se já não tiver o selo, adiciona o selo de certificação via edital
                 if(!$has_seal) {
                     $organization->createSealRelation($seal, agent: $organization);
                 }
+
+                // Se já não tiver o selo, adiciona o selo de aguardando atualização
+                if($scenario != 1 && !$has_waiting_update_seal) {
+                    $organization->createSealRelation($waiting_update_seal, agent: $organization);
+                }
             }
     
-            $registration->setStatusToApproved(true);
-        }
+            if(!$registration->sentTimestamp) {
+                $registration->sentTimestamp = new \DateTime;
+            }
+
+            $registration->setStatusToApproved(false);
+
+            // Caso a inscrição for criada pela importação, altera a data de certificação com a data da planilha
+            if($scenario != 1) {
+                $relations = $organization->getSealRelations();
+                $seals_ids = [
+                    $app->config['rcv.verificationSeals']['ponto'],
+                    $app->config['rcv.verificationSeals']['pontao']
+                ];
+    
+                foreach($relations as $relation) {
+                    if(in_array($relation->seal->id, $seals_ids)) {
+                        $relation->createTimestamp = DateTime::createFromFormat(Utils::detectDateFormat($row->ponto_data), $row->ponto_data);
+                        $relation->save();
+                    }
+                }
+            }
+
+            // Salva dados da importação na inscrição criada/manipulada
+            $registration->rcv_importer_row = [
+                'data' => (array) $row,
+                'scenario' => $scenario
+            ];
+            $registration->rcv_pnab_registration = $pnab_registration;
+            $registration->save();
+        }       
 
         $result['registration_id'] = $scenario == 5 ? null : $registration->id;
         $result['scenario']        = $scenario;
         $result['category']        = $row->ponto_tipo;
+        $result['email']           = $row->responsavel_email;
+        $result['userName']        = $row->responsavel_nome;
 
         return $result;
     }
@@ -609,6 +773,42 @@ class Importer {
                 } elseif(!empty(!v::email()->validate($field_value))) {
                     $errors[] = "Linha: {$line} - Campo 'Email da organização' inválido.";
                 }
+            } elseif($key == 'ponto_data') {
+                if (empty($row->ponto_data)) {
+                    $errors[] = "Linha: {$line} - Campo 'Data da Certificação' obrigatório.";
+                } elseif(!Utils::detectDateFormat($row->ponto_data)) {
+                    $errors[] = "Linha: {$line} - Campo 'Data da Certificação' inválido.";
+                }
+            } elseif($key == 'organizacao_telefone') {
+                if(empty($row->organizacao_telefone)) {
+                    $errors[] = "Linha: {$line} - Campo 'Telefone da organização' obrigatório.";
+                } elseif(!v::brPhone()->validate($row->organizacao_telefone)) {
+                    $errors[] = "Linha: {$line} - Campo 'Telefone da organização' inválido.";
+                }
+            } elseif($key == 'responsavel_telefone') {
+                if(empty($row->responsavel_telefone)) {
+                    $errors[] = "Linha: {$line} - Campo 'Telefone do responsável' obrigatório.";
+                } elseif(!v::brPhone()->validate($row->responsavel_telefone)) {
+                    $errors[] = "Linha: {$line} - Campo 'Telefone do responsável' inválido.";
+                }
+            } elseif($key == 'organizacao_nome') {
+                if(empty($row->organizacao_nome)) {
+                    $errors[] = "Linha: {$line} - Campo 'Nome da organização' obrigatório.";
+                }
+            } elseif($key == 'responsavel_nome') {
+                if(empty($row->responsavel_nome)) {
+                    $errors[] = "Linha: {$line} - Campo 'Nome do responsável' obrigatório.";
+                }
+            } elseif($key == 'ponto_uf') {
+                if(empty($row->ponto_uf)) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' obrigatório.";
+                } elseif(strlen($row->ponto_uf) != 2 ) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Deve conter a sigla do estado.";
+                }
+            } elseif($key == 'ponto_municipio') {
+                if(empty($row->ponto_municipio)) {
+                    $errors[] = "Linha: {$line} - Campo 'Município' obrigatório.";
+                }
             } else {
                 // Valida se os demais campos estão preenchidos
                 if (empty($field_value)) {
@@ -640,6 +840,7 @@ class Importer {
         $sheet = Importer::getSheet($file);
         $header = $sheet->rangeToArray("A1:" . $sheet->getHighestColumn() . "1", null, true, true, true)[1];
         $data_range = $sheet->rangeToArray("A2:" . $sheet->getHighestColumn() . $sheet->getHighestRow(), null, true, true, true);
+        $data_range = array_values(array_filter(array_map('array_filter', $data_range)));
 
         $result = [
             'registration' => $registration,
@@ -647,10 +848,14 @@ class Importer {
             'success_rows' => 0
         ];
 
+        $total_file_rows = count($data_range);
+
         foreach ($data_range as $index => $row) {
-            if (!array_filter($row)) {
-                continue;
-            }
+            $app->em->clear();
+            $parsed_row = null;
+            $process_row = null;
+            
+            $line = $index + 1;
 
             $app->log->debug("=========================================================");
 
@@ -658,20 +863,60 @@ class Importer {
 
             try {
                 $parsed_row = Importer::parseRow($header, $row);
-                $process_row = Importer::processRow($parsed_row);
+                $process_row = Importer::processRow($parsed_row, $registration);
                 $result['data_rows'][] = $process_row;
                 $result['success_rows']++;
 
-                $app->log->info("Linha {$index} importada com sucesso.");
-            } catch (\Exception $e) {
-                $app->log->error("Erro ao importar a linha {$index}: " . $e->getMessage());
+                $log = "{$registration->id} - Linha {$line} importada com sucesso.";
+                $app->log->info($log);
+
+                $log_file = "[{$line}/{$total_file_rows}] Cenário {$process_row['scenario']} importado com sucesso";
+                Importer::generateImporterLog($registration, $log_file);
+
+                $percentage = number_format(($line / $total_file_rows) * 100, 1) . '%';
+                Importer::updateImporterStatusFile($registration, [
+                    'status' => 1,
+                    'message' => $percentage,
+                    'timestamp' => date('d-m-Y H:i:s')
+                ]);
+            } catch (\Throwable $e) {
+                $error_class = get_class($e);
+                $error_trace = json_encode($e->getTrace());
+
+                $log = "Erro ao importar a linha {$line}: ({$error_class}) " . $e->getMessage();
+                $log_error_trace = "Rastreamento de erro: {$error_trace}";
+                $app->log->error($log);
+                $app->log->error($log_error_trace);
+
+                $scenario = $process_row['scenario'] ?? 'desconhecido';
+
+                $log_file = "[{$line}/{$total_file_rows}] Cenário {$scenario} ERRO";
+                Importer::generateImporterLog($registration, $log_file);
+                Importer::generateImporterLog($registration, $e->getMessage());
+                Importer::generateImporterLog($registration, $e->getTraceAsString());
+
+                Importer::updateImporterStatusFile($registration, [
+                    'status' => 2,
+                    'message' => $e->getMessage(),
+                    'timestamp' => date('d-m-Y H:i:s')
+                ]);
+                
                 $app->enableAccessControl();
                 throw $e;
             }
+            $app->em->flush();
         }
 
         $app->enableAccessControl();
         $app->log->info("Importação concluída para a inscrição {$registration->id}.");
+
+        Importer::generateImporterLog($registration, 'Importação concluída com sucesso');
+
+        Importer::updateImporterStatusFile($registration, [
+            'status' => 10,
+            'message' => 'Importado com sucesso',
+            'timestamp' => date('d-m-Y H:i:s')
+        ]);
 
         return $result;
     }
@@ -704,7 +949,7 @@ class Importer {
                 ];
 
                 $message = $app->renderMustacheTemplate('primeiro_caso.html', $template_data);
-                $subject = "Sua inscrição {$registration->number} foi certificada por um Edital de Seleção da Cultura Viva.";
+                $subject = "[Cultura Viva] Sua organização {$organization->name} foi certificada por um Edital de Seleção da Cultura Viva.";
 
             } else if ($row['scenario'] == 2) {
 
@@ -713,14 +958,14 @@ class Importer {
                 $template_data = [
                     'siteName'         => $app->siteName,
                     'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('registration', 'single', [$registration->id]),
+                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
                     'organizationName' => $row['organization']->name,
                     'organizationCNPJ' => $row['organization']->cnpj,
                     'type'             => $row['category']
                 ];
 
                 $message = $app->renderMustacheTemplate('segundo_caso.html', $template_data);
-                $subject = "Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
+                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
 
             } else if ($row['scenario'] == 3.1) {
 
@@ -729,30 +974,30 @@ class Importer {
                 $template_data = [
                     'siteName'         => $app->siteName,
                     'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('registration', 'single', [$registration->id]),
+                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
                     'organizationName' => $row['organization']->name,
                     'organizationCNPJ' => $row['organization']->cnpj,
                     'type'             => $row['category']
                 ];
 
                 $message = $app->renderMustacheTemplate('terceiro_caso.html', $template_data);
-                $subject = "Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
+                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
 
-            } else if ($row['scenario'] == 3.2) {
+            } else if ($row['scenario'] == 4) {
 
                 $registration = $app->repo('registration')->findOneBy(['id' => $row['registration_id']]);
 
                 $template_data = [
                     'siteName'         => $app->siteName,
                     'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('registration', 'single', [$registration->id]),
+                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
                     'organizationName' => $row['organization']->name,
                     'organizationCNPJ' => $row['organization']->cnpj,
                     'type'             => $row['category']
                 ];
 
                 $message = $app->renderMustacheTemplate('quarto_caso.html', $template_data);
-                $subject = "Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
+                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
 
             } else if ($row['scenario'] == 5) {
 
@@ -760,7 +1005,7 @@ class Importer {
 
                 $template_data = [
                     'siteName'         => $app->siteName,
-                    'userName'         => $organization->parent->name,
+                    'userName'         => $row['userName'],
                     'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
                     'organizationName' => $organization->name,
                     'organizationCNPJ' => $organization->cnpj,
@@ -768,12 +1013,12 @@ class Importer {
                 ];
 
                 $message = $app->renderMustacheTemplate('quinto_caso.html', $template_data);
-                $subject = "Sua organização {$organization->name} foi certificada por um Edital de Seleção da Cultura Viva.";
+                $subject = "[Cultura Viva] Sua organização {$organization->name} foi certificada por um Edital de Seleção da Cultura Viva.";
             } else {
                 continue;
             }
 
-            $to = $registration->owner->emailPrivado;
+            $to = $row['email'] ?? '';
 
             $app->createAndSendMailMessage([
                 'to'      => $to,
@@ -794,7 +1039,7 @@ class Importer {
         ];
 
         $to      = $registration->owner->emailPrivado;
-        $subject = "Importação realizada com sucesso";
+        $subject = "[Cultura Viva] Importação realizada com sucesso";
         $message = $app->renderMustacheTemplate('import_summary.html', $template_data);
 
         $app->createAndSendMailMessage([
@@ -819,7 +1064,7 @@ class Importer {
         ];
 
         $to      = $registration->owner->emailPrivado;
-        $subject = "A importação da planilha falhou";
+        $subject = "[Cultura Viva] A importação da planilha falhou";
         $message = $app->renderMustacheTemplate('import_error.html', $template_data);
 
         $app->createAndSendMailMessage([
@@ -858,5 +1103,62 @@ class Importer {
         }
 
         return $result;
+    }
+
+    public static function generateImporterLog(Registration $registration, $log_message) {
+        $dir_path = PUBLIC_PATH . 'files/importer/';
+        $log_path = $dir_path . $registration->id . '.log';
+
+        if (!is_dir($dir_path)) {
+            mkdir($dir_path, 0755, true);
+        }
+
+        $log = date('Y-m-d H:i:s') . " " . $log_message . "\n";
+
+        file_put_contents($log_path, $log, FILE_APPEND);
+    }
+
+    public static function updateImporterStatusFile(Registration $registration, array $status) {
+        $dir_path = PUBLIC_PATH . 'files/importer/';
+        $status_file_path = $dir_path . $registration->id . '_status.json';
+
+        if (!is_dir($dir_path)) {
+            mkdir($dir_path, 0755, true);
+        }
+
+        file_put_contents($status_file_path, json_encode($status, JSON_PRETTY_PRINT));
+    }
+
+    public static function getTypeDict(string $type): string {
+        $app = App::i();
+        $categories_map = $app->config['rcv.categoriesMap'];
+
+        $type_dict = [
+            'ponto-coletivo' => 'ponto_coletivo',
+            'ponto-entidade' => 'ponto_entidade',
+            'pontao' => 'pontao'
+        ];
+
+        $type_selected = array_search($type, $categories_map);
+        $type_selected = $type_dict[$type_selected];
+        return $type_selected;
+    }
+
+    public static function ensureTypeInArray(string $type_selected, ?array $tipo_ponto = null): array {
+         // Se o tipo de ponto já existir, não adiciona novamente
+        if($tipo_ponto && is_array($tipo_ponto) && !in_array($type_selected, $tipo_ponto)) {
+            $tipo_ponto[] = $type_selected;
+        } else if($tipo_ponto && !is_array($tipo_ponto)) {
+            $tipo_ponto = [$tipo_ponto];
+
+            if(!in_array($type_selected, $tipo_ponto)) {
+                $tipo_ponto[] = $type_selected;
+            }
+            
+        } else {
+            $tipo_ponto = [$type_selected];
+        }
+
+        return $tipo_ponto;
     }
 }

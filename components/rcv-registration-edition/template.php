@@ -60,11 +60,7 @@ $this->import('
         </main>
 
         <aside>
-            <?php if($app->request->route === "GET registration.registrationEdit"): ?>
-                <registration-actions :registration="entity" :steps="steps" v-model:step-index="stepIndex" editable-fields></registration-actions>
-            <?php else :?>
-                <registration-actions :registration="entity" :steps="steps" v-model:step-index="stepIndex"></registration-actions>
-            <?php endif?>
+            <registration-actions :registration="entity" :steps="steps" v-model:step-index="stepIndex" :editable-fields="editableFields"></registration-actions>
         </aside>
     </mc-container>
 </div>

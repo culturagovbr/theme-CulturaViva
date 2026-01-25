@@ -153,6 +153,33 @@ $url = $app->createUrl('opportunity', 'single', [$app->config['rcv.pnabOpportuni
                     </div>
                 </div>
             <?php endif; ?>
+
+            <?php if (!$app->config['rcv.disableDataDashboard']) : ?>
+            <div class="card">
+                <div class="card__left">
+                    <div class="card__left--content">
+                        <div class="card__left--content-icon space__background">
+                            <mc-icon name="indicator"></mc-icon>
+                        </div>                        
+                        <div class="card__left--content-title">
+                            <label class="title">
+                                <?= i::__('Indicadores') ?>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="card__left--img">
+                        <img src="<?php $this->asset('img/rcv-home-entities/banner-home6.png') ?>" />
+                    </div>
+                </div>
+                <div class="card__right">
+                    <p><?= $this->text('spaces', i::__('Confira informações sobre a distribuição geográfica dos Pontos e Pontões de Cultura certificados, além suas áreas de atuação.')) ?></p>
+                    <a href="<?= $url = $app->createUrl('metabase', 'dashboard'); ?>/public" class="button button--icon button--sm project__color">
+                        <?= i::__('Acesse') ?>
+                        <mc-icon name="access"></mc-icon>
+                    </a>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

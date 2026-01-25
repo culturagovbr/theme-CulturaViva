@@ -51,6 +51,17 @@ $this->breadcrumb = [
              em seu estado ou município por meio de editais Cultura Viva já realizados. O material enviado passará por 
              análise da SCDC.') ?></p>
 
+            <p><?= i::__('Cada formulário enviado deve corresponder exclusivamente a um único edital publicado.') ?></p>
+            <p><?= i::__('Não utilize o mesmo formulário para informações referentes a mais de um edital.') ?></p>
+
+            <div class="single-pnab__download">
+                <p>
+                    <a :href="entity.files?.downloads[0]?.url" class="btn btn-primary" target="_blank">
+                        <?= i::__('Baixe aqui orientações para preenchimento da planilha') ?>
+                    </a>
+                </p>
+            </div>
+
             <div class="static-page__section single-pnab__submit">
                 <rcv-pnab-subscription :entity="entity"></rcv-pnab-subscription>
             </div>

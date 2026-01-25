@@ -112,15 +112,17 @@ $this->import('
                 </li> -->
                 <?php $this->applyTemplateHook('mc-header-menu-events', 'after') ?>
 
-                <?php $this->applyTemplateHook('mc-header-menu-events', 'before') ?>
-                <!-- <li v-if="global.enabledEntities.events">
-                    <?php $this->applyTemplateHook('mc-header-menu-events', 'begin') ?>
-                    <a href=" " class="mc-header-menu--item event">
-                        <span class="icon"><mc-icon name="graph-bar"></mc-icon></span>
-                        <p class="label"> <?php i::_e('Indicadores') ?> </p>
-                    </a>
-                    <?php $this->applyTemplateHook('mc-header-menu-events', 'end') ?>
-                </li> -->
+                <?php $this->applyTemplateHook('mc-header-menu-indicators', 'before') ?>
+                <?php if (!$app->config['rcv.disableDataDashboard']) : ?>
+                    <li>
+                        <?php $this->applyTemplateHook('mc-header-menu-events', 'begin') ?>
+                        <a href="<?=$app->createUrl('metabase', 'dashboard');?>public" class="mc-header-menu--item event">
+                            <span class="icon"><mc-icon name="indicator"></mc-icon></span>
+                            <p class="label"> <?php i::_e('Indicadores') ?> </p>
+                        </a>
+                        <?php $this->applyTemplateHook('mc-header-menu-indicators', 'end') ?>
+                    </li>
+                <?php endif; ?>
                 <?php $this->applyTemplateHook('mc-header-menu-events', 'after') ?>
 
                 <?php $this->applyTemplateHook('mc-header-menu', 'end') ?>

@@ -1,6 +1,5 @@
 # theme-CulturaViva
 Este repositório contém especificidades do Rede Cultura Viva para funcionar como tema do Mapa da Cultura.
-https://culturaviva.cultura.gov.br/
 
 ## Configuração do tema
 Há duas chaves principais de configuração do tema:

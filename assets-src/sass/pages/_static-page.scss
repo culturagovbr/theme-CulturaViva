@@ -104,12 +104,24 @@
         font-family: $font-family-highlight;
 
         & ul {
-            margin: 0;
+            margin: size(8) 0;
+
             & > li {
-                margin-bottom: size(8);
+                margin: size(8) 0;
                 text-align: justify;
+                display: grid;
+                gap: size(8);
             }
         }
+
+        & img {
+            max-width: size(600);
+            width: 100%;
+        }
+    }
+
+    &__sub {
+        margin-left: size(25);
     }
 
     &__accordion {

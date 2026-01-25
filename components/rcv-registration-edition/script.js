@@ -5,6 +5,10 @@ app.component('rcv-registration-edition', {
         entity: {
             type: Entity,
             required: true,
+        },
+        editableFields: {
+            type: Boolean,
+            default: false
         }
     },
 

@@ -247,9 +247,12 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if($app->config['rcv.disableApiFilters'] || $this->parentQuery) {
                 return;
             }
+
+            $alias = "rcv_tipo_" . spl_object_id($this);
+
             $joins .= "
-                LEFT JOIN e.__metadata rcv_tipo 
-                    WITH rcv_tipo.key = 'rcv_tipo'";
+                LEFT JOIN e.__metadata {$alias} 
+                    WITH {$alias}.key = 'rcv_tipo'";
             
             if(!$theme->canUserControlRCV()) {
                 $joins .= "
@@ -269,7 +272,9 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
-            $_where = "((e._type = 2 AND rcv_tipo.value = 'ponto') OR e._type = 1)";
+            $alias = "rcv_tipo_" . spl_object_id($this);
+
+            $_where = "((e._type = 2 AND {$alias}.value = 'ponto') OR e._type = 1)";
 
             if(!$theme->canUserControlRCV()) {
                 $_where .= " AND ((e._type = 2 AND rcv_seal.id IS NOT NULL) OR e._type = 1)";
@@ -302,12 +307,15 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
             
             $agent_meta_class = AgentMeta::class;
+
+            $alias = "rcv_space_owner" . spl_object_id($this);
+
             $joins .= "
-                JOIN e.owner rcv_space_owner
-                JOIN $agent_meta_class rcv_space_owner_meta
-                    WITH rcv_space_owner_meta.key = 'rcv_sede_spaceId'
-                JOIN rcv_space_owner_meta.owner rcv_space_owner_meta_agent 
-                    WITH rcv_space_owner_meta_agent.user = rcv_space_owner.user";
+                JOIN e.owner {$alias}
+                JOIN $agent_meta_class {$alias}_meta
+                    WITH {$alias}_meta.key = 'rcv_sede_spaceId'
+                JOIN {$alias}_meta.owner {$alias}_meta_agent 
+                    WITH {$alias}_meta_agent.user = {$alias}.user";
 
             
             if($app->auth->isUserAuthenticated() && !$app->user->is('admin')) {
@@ -324,11 +332,13 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
-            $_where = "CAST(rcv_space_owner_meta.value AS INTEGER) = e.id";
+            $alias = "rcv_space_owner" . spl_object_id($this);
+
+            $_where = "CAST({$alias}_meta.value AS INTEGER) = e.id";
 
             if($app->auth->isUserAuthenticated()) {
                 if($app->user->is('admin')) {
-                    $_where = "rcv_space_owner.user = {$app->user->id} OR ($_where)";
+                    $_where = "{$alias}.user = {$app->user->id} OR ($_where)";
                 } else {
                     $_where = "rcv_pcache_space.user = {$app->user->id} OR ($_where)";
                 }
@@ -372,6 +382,15 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if($app->config['rcv.pnabOpportunityId'] == $opportunity->id) {
                 $template = 'single-pnab';
             }
+        });
+
+
+        $app->hook('GET(site.funcoes-do-cadastro)', function() use($app) {
+            $this->render('funcoes-do-cadastro', []);
+        });
+
+        $app->hook('GET(site.perguntas-frequentes)', function() use($app) {
+            $this->render('faq', []);
         });
 
         $app->hook('GET(site.pncv)', function() use($app) {
@@ -471,6 +490,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
         // Carrega novos ícones 'iconfy' na estrutura default
         $app->hook('component(mc-icon).iconset', function(&$iconset){
+            $iconset['indicator'] = 'mdi:graph-bar';
             $iconset['graph-bar'] = "foundation:graph-bar";
             $iconset['section-share'] = "ic:baseline-ios-share";
             $iconset['section-seals'] = "ic:round-turned-in";
@@ -489,7 +509,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->requireAuthentication();
             
             $registration_info = $this->data['registration'];
-            $registration = $app->repo('Registration')->find($registration_info['id']);
+            $registration = $app->repo('Registration')->find($registration_info['id'] ?? $registration_info['_id']);
 
             if($registration) {
                 $cnpj = $this->data['cnpj'];
@@ -547,6 +567,19 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $agent->cnpj = $cnpj;
                 $agent->nomeCompleto = $full_name;
                 $agent->save(true);
+                $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
+                
+                $data = [
+                    "owner_name" => $registration->owner->name,
+                    "agent_name" => $agent->name,
+                    "agent_cnpj" => $agent->cnpj,
+                    "recipient" => $registration->owner->email,
+                    "email_destinatario" => $user_email
+                    
+                ];
+                
+                $theme->sendTransactionalEmail('change_of_cnpj', $data);
+
                 $app->enableAccessControl();
 
                 $this->json(true);
@@ -593,8 +626,10 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 // A organização está concorrendo em algum edital da Cultura Viva atualmente?
                 $field_name = $app->config['rcv.fieldQuestion'];
                 if($this->$field_name === $app->config['rcv.questionResponse']) {
+                    $app->disableAccessControl();
                     $this->range = $app->config['rcv.rangesMap']['cadastro-via-edital'];
                     $this->save(true);
+                    $app->enableAccessControl();
                 }
 
                 $organization = $this->relatedAgents['coletivo'][0];
@@ -606,6 +641,11 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     $agent->save(true);
                     $app->enableAccessControl();
                 }
+
+                $app->disableAccessControl();
+                $agent->rcv_last_update_timestamp = date('Y-m-d H:i:s');
+                $agent->save(true);
+                $app->enableAccessControl();
             }
         });
 
@@ -622,7 +662,9 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             ];
  
             if($registration) {
+                $agent = $registration->relatedAgents['coletivo'][0];
                 $proponent_option = $this->data['option'];
+                $new_cnpj = null;
 
                 switch($proponent_option) {
                     case 1:
@@ -648,7 +690,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $app->disableAccessControl();
 
                 if ($new_cnpj && $full_name) {
-                    $agent = $registration->relatedAgents['coletivo'][0];
                     $conn = $app->em->getConnection();
                     $cnpj_field = $conn->fetchAll("
                         SELECT 
@@ -756,6 +797,21 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $_SESSION["{$registration}:editableFields"] = true;
                 $registration->clearPermissionCache();
                 
+                $url = $app->createUrl('registration', 'registrationEdit', [$registration->id]);
+
+                $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
+
+                $data = [
+                    "owner_name" => $registration->owner->name,
+                    "agent_name" => $agent->name,
+                    "agent_cnpj" => $agent->cnpj,
+                    "recipient" => $registration->owner->email,
+                    "email_destinatario" => $user_email
+                    
+                ];
+               
+                $theme->sendTransactionalEmail('alteration_type', $data);
+
                 $app->enableAccessControl();
 
                 $url = $app->createUrl('registration', 'registrationEdit', [$registration->id]);
@@ -859,6 +915,18 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                             'route' => 'panel/events', 'icon' => 'event', 'label' => i::__('Meus Eventos'),
                             'condition' => function () use ($app) {
                                 return $app->isEnabled('events');
+                            },
+                        ],
+                        [
+                            'route' => 'metabase/dashboard', 'params' => [ 'admin' ], 'icon' => 'indicator', 'label' => i::__('Indicadores'),
+                            'condition' => function () use ($app) {
+                                 $opportunity = $app->repo('Opportunity')->find('5386');
+
+                                if ($app->user && $app->user->is('admin') || $opportunity->canUser('@control')) {
+                                    return true;
+                                }
+
+                                return false;
                             },
                         ],
                     ],
@@ -1014,12 +1082,31 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
                 $all_fields = array_merge($registration_field_configuration, $registration_file_configuration);
 
+                // Validação do bloqueio dos campos
+                $locked_fields = [];
+                $blocked_fields = [$full_name_owner_field_name];
+
+                if ($registration->relatedAgents['coletivo'][0]->name) {
+                    $locked_fields[] = 'name';
+                    $blocked_fields[] = $cnpj_field_name;
+                }
+
+                if ($registration->relatedAgents['coletivo'][0]->nomeCompleto) {
+                    $locked_fields[] = 'nomeCompleto';
+                    $blocked_fields[] = $full_name_field_name;
+                }
+
+                if ($registration->relatedAgents['coletivo'][0]->cnpj) {
+                    $locked_fields[] = 'cnpj';
+                    $blocked_fields[] = $cpf_field_name;
+                }
+
                 $editableFields = [];
                 foreach($all_fields as $field) {
                     $fieldName = $field->fieldName ?: $field->fileGroupName;
-                    $blocked_fields = [$cnpj_field_name, $full_name_field_name, $full_name_owner_field_name, $cpf_field_name];
 
-                    if(in_array($fieldName, $blocked_fields) && !$theme->opportunity->canUser("@control")) {
+                    $registration->opportunity->registerRegistrationMetadata();
+                    if(in_array($fieldName, $blocked_fields) && !$theme->opportunity->canUser("@control") && $registration->$fieldName) {
                         continue;
                     }
                     
@@ -1028,7 +1115,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
                 $app->disableAccessControl();
                 $registration->editableFields = $editableFields;
-                $registration->rcv_locked_fields = ['name', 'cnpj', 'nomeCompleto'];
+                $registration->rcv_locked_fields = $locked_fields;
                 $registration->save(true);
                 $_SESSION["{$registration}:editableFields"] = true;
                 $registration->clearPermissionCache();
@@ -1109,6 +1196,30 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $app->enableAccessControl();
             }
             
+            if($this->range != $app->config['rcv.rangesMap']['cadastro-via-edital']) {
+                $theme->sendMailRegistrationStatus($this);
+            }
+        });
+
+        $app->hook('entity(Registration).status(notapproved)', function() use($app, $theme) {
+            /** @var Registration $this */
+
+            // Envia notificação de importação não aprovada
+            $opportunity_pnab_id = $app->config['rcv.pnabOpportunityId'];
+            if($this->opportunity->id == $opportunity_pnab_id) {
+                $theme->sendMailRegistrationPnabDenied($this);
+            }
+
+            // Verifica se a inscrição é da oportunidade correta
+            $opportunity_id = $app->config['rcv.opportunityId'];
+            if($this->opportunity->id != $opportunity_id) {
+                return;
+            }
+
+            // Envia notificação de inscrição não aprovada
+            if($this->range != $app->config['rcv.rangesMap']['cadastro-via-edital']) {
+                $theme->sendMailRegistrationStatus($this);
+            }
         });
 
         // Altera template de email ao iniciar uma inscrição
@@ -1194,7 +1305,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $org_link = "<a rel='noopener noreferrer' href=\"{$org_url}\">{$org_name}</a>";
                 $destinattion_link = "<a rel='noopener noreferrer' href=\"{$destinattion_url}\">{$destinattion_name}</a>";
                 $org_owner_url = "<a rel='noopener noreferrer' href=\"{$organization->owner->singleUrl}\">{$organization->owner->name}</a>";
-                $subject = 'Requisição de mudança de propriedade';
+                $subject = '[Cultura Viva] Requisição de mudança de propriedade';
 
                 if($this->metadata['type'] === "request") {
                     $send_message = sprintf(
@@ -1382,6 +1493,17 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $agent = $app->repo('Agent')->find($agent_id);
                 $theme->sendMailNotification($app, $agent, $organization, $message);
 
+                $registration = $organization->rcv_registration;
+                $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
+
+                $data = [
+                    "owner_name" => $registration->owner->name,
+                    "agent_name" => $organization->name,  
+                    "agent_cnpj" => $organization->cnpj ?? '',
+                    "email_destinatario" => $user_email];
+
+                $theme->sendTransactionalEmail('deactivation_tipo', $data);
+
                 $this->json(true);
             }
 
@@ -1418,18 +1540,36 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:before', function($job, &$query) {
+            $query['status'] = API::GT(0);
+        });
+
         $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:after', function($job, &$result) use($app, $theme) {
             if($job->entityClassName == Agent::class) {
                 foreach($result as &$entity) {
                     $agent = $app->repo('Agent')->find($entity['id']);
 
                     if($agent) {
-                        if(isset($entity['tipoPonto'])) {
-                            $tipo_ponto = str_replace('_', '-', $entity['tipoPonto']);
-                            $entity['tipoPonto'] = $app->config['rcv.categoriesMap'][$tipo_ponto];
+                        $entity['publicLocation'] = isset($agent->publicLocation) && $agent->publicLocation ? 'Sim' : 'Não';
+
+                        if ($agent->location) {
+                            $entity['location'] = (string) $agent->location;
+                        }
+                        
+                        if (isset($entity['tipoPonto'])) {
+                            $tipos = [];
+
+                            if(is_array($entity['tipoPonto'])) {
+                                foreach ($entity['tipoPonto'] as $tipo) {
+                                    $tipo_ponto = str_replace('_', '-', $tipo);
+                                    
+                                    $tipos[] = $app->config['rcv.categoriesMap'][$tipo_ponto];
+                                }
+    
+                                $entity['tipoPonto'] = implode(', ', $tipos);
+                            }
                         }
 
-                        $entity['id'] = "<a href='{$agent->singleUrl}'>{$agent->id}</a>";
                         $entity['ownerName'] = $agent->owner->user->profile->name;
                         $entity['cpf'] = $agent->owner->user->profile->cpf;
 
@@ -1645,6 +1785,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 "rcv_atuacao_demais_segmentos" => ["label" => "Demais áreas de atuação"],
                 "rcv_deficiencia" => ["label" => "Público PCD"],
                 "outrosSelos" => ["label" => "Outros Selos"],
+                "publicLocation" => ["label" => "Localização Pública"],
+                "location" => ["label" => "Localização"],
             ];
 
             $definitions = $increment + $definitions;
@@ -1669,6 +1811,14 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                         'value' => $field,
                         'slug' => $field
                     ];
+
+                    if ($field == "publicLocation") {
+                        $data['value'] = "publicLocation";
+                    }
+
+                    if ($field == "location") {
+                        $data['value'] = "location";
+                    }
 
                     if(str_starts_with($field, 'geo')) {
                         $data['text'] = $def['label'] . " - Divisão geográfica";
@@ -1717,6 +1867,34 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     $additionalHeaders[] = $data;
                 }
             }
+
+            $opportunity = $app->repo('Opportunity')->find($app->config['rcv.opportunityId']);
+            $fields = $opportunity->registrationFieldConfigurations;
+
+            $order_map = [];
+            foreach ($fields as $field) {
+                if ($field->fieldType == 'agent-collective-field' || $field->fieldType == 'agent-owner-field') {
+                    $field_config = $field->config['entityField'] ?: null;
+
+                    if ($field_config) {
+                        $order_map[$field_config] = [
+                            'stepOrder' => $field->step->displayOrder,
+                            'fieldOrder' => $field->displayOrder,
+                        ];
+                    }
+                }
+            }
+
+            usort($additionalHeaders, function ($a, $b) use ($order_map) {
+                $a_slug = $a['slug'] ?? null;
+                $b_slug = $b['slug'] ?? null;
+
+                $a_order = $order_map[$a_slug] ?? ['stepOrder' => PHP_INT_MAX, 'fieldOrder' => PHP_INT_MAX];
+                $b_order = $order_map[$b_slug] ?? ['stepOrder' => PHP_INT_MAX, 'fieldOrder' => PHP_INT_MAX];
+
+                return $a_order['stepOrder'] <=> $b_order['stepOrder']
+                    ?: $a_order['fieldOrder'] <=> $b_order['fieldOrder'];
+            });
         });
 
         $app->hook('component(agent-table).additionalHeaders', function (&$defaultHeaders, &$additionalHeaders, &$default_select) use ($app) {
@@ -1762,14 +1940,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 })
             );
 
-            // $defaultHeaders = array_values(
-            //     array_filter($defaultHeaders, function($item) {
-            //         $slugIsEditable = isset($item['slug']) && $item['slug'] !== 'editable';
-            //         $valueIsEditable = isset($item['value']) && $item['value'] !== 'editable';
-            //         return $slugIsEditable || $valueIsEditable;
-            //     })
-            // );
-
             // Lista de valores que precisam ser removidos
             $skipFields = ['rcv_locked_fields', 'appliedPointReward', 'appliedForQuota', 'valuersIncludeList', 'valuersExcludeList', 'valuers', 'rcv_tipo', 'proponentType'];
             // Filtrar o array
@@ -1778,6 +1948,42 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $slugCheck = isset($header['slug']) && in_array($header['slug'], $skipFields);
                 return !$valueCheck && !$slugCheck;
             }));
+
+            $opportunity = $this->controller->requestedEntity;
+            if($opportunity->id == $app->config['rcv.pnabOpportunityId']) {
+                $defaultHeaders[] = [
+                    'text' => 'Processamento',
+                    'value' => 'linkLog',
+                    'slug' => 'linkLog'
+                ];
+            }
+
+            if($opportunity->id == $app->config['rcv.opportunityId']) {
+                $fields = $opportunity->registrationFieldConfigurations;
+                $order_map = [];
+
+                foreach ($fields as $field) {
+                    if ($field->fieldType == 'agent-collective-field' || $field->fieldType == 'agent-owner-field') {
+                        if ($field_name = $field->fieldName ?: null) {
+                            $order_map[$field_name] = [
+                                'stepOrder' => $field->step->displayOrder,
+                                'fieldOrder' => $field->displayOrder,
+                            ];
+                        }
+                    }
+                }
+    
+                usort($defaultHeaders, function ($a, $b) use ($order_map) {
+                    $a_slug = $a['slug'] ?? null;
+                    $b_slug = $b['slug'] ?? null;
+    
+                    $a_order = $order_map[$a_slug] ?? ['stepOrder' => PHP_INT_MAX, 'fieldOrder' => PHP_INT_MAX];
+                    $b_order = $order_map[$b_slug] ?? ['stepOrder' => PHP_INT_MAX, 'fieldOrder' => PHP_INT_MAX];
+    
+                    return $a_order['stepOrder'] <=> $b_order['stepOrder']
+                        ?: $a_order['fieldOrder'] <=> $b_order['fieldOrder'];
+                });
+            }
         });
 
         // Atualiza a data da ultima atualização cadastral no agente
@@ -1848,8 +2054,15 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         // Valida a planilha das organizações certificadas antes do envio da inscrição
         $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app, $self) {
             /** @var \MapasCulturais\Entities\Registration $this */
-
             if ($this->opportunity->id !== (int) $app->config['rcv.pnabOpportunityId']) {
+                return;
+            }
+
+            ini_set('max_execution_time', 0);
+            ini_set('memory_limit', '1024M');  
+
+            if(!isset($app->config['rcv.pnabOpportunityAttachmentId']) || !isset($app->config['rcv.pnabOpportunityAttachmentId'])) {
+                $errorsResult['error'] = ['Erro inesperado, procure o suporte.'];
                 return;
             }
 
@@ -1857,14 +2070,22 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $pnab_attachment_id = 'rfc_' . $app->config['rcv.pnabOpportunityAttachmentId'];
 
             if (!isset($this->files[$pnab_attachment_id])) {
+                $errorsResult[$field_file_id] = ['A planilha é obrigatória.'];
                 return;
             }
 
-            if ($sheet = Importer::getSheet($this->files[$pnab_attachment_id])) {
+            $sheet = Importer::getSheet($this->files[$pnab_attachment_id]);
+
+            if (empty($sheet)) {
+                $errorsResult[$field_file_id] = ['Não foi possível abrir o arquivo enviado.'];
+                return;
+            }
+
+            try {
                 $header = $sheet->rangeToArray("A1:" . $sheet->getHighestColumn() . "1", null, true, true, true)[1];
                 $data_range = $sheet->rangeToArray("A2:" . $sheet->getHighestColumn() . $sheet->getHighestRow(), null, true, true, true);
 
-                if (count($data_range) === 0) {
+                if (empty($data_range)) {
                     $errorsResult[$field_file_id] = [i::__('A planilha deve conter pelo menos uma linha de dados.')];
                     return;
                 }
@@ -1886,6 +2107,10 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 if (!empty($validate_rows)) {
                     $errorsResult[$field_file_id] = $validate_rows;
                 }
+                
+            } catch (\Exception $e) {
+                $errorsResult[$field_file_id] = ['A planilha não foi processada pois não está em conformidade com o modelo disponibilizado. Verifique as regras e tente novamente.'];
+                return;
             }
         });
 
@@ -1908,11 +2133,45 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
             $controller = $app->view->controller;
 
-            if($this->id == $app->config['rcv.opportunityId'] && $controller && $controller->action == 'registrationEdit') {
-                $concorrendo_edital = $app->config['rcv.concorrendoEditalField'];
-                
+            $referer = php_sapi_name() != "cli" ? $app->request->getReferer() : null;
+            $registration = $app->view->controller->requestedEntity ?? null;
+            $validating = false;
+
+            if($registration instanceof Registration) {
+                $registration_url = $app->createUrl('registration', 'registrationEdit', [$registration->id]);
+                $validating = $registration_url == ($referer[0] ?? false);
+            }
+
+            if($validating || ($this->id == $app->config['rcv.opportunityId'] && $controller && $controller->action == 'registrationEdit')) {
+                $concorrendo_edital = $app->config['rcv.fieldQuestion'];
+
                 $result = array_filter($result, function($field) use ($concorrendo_edital) {
                     return $field->fieldName != $concorrendo_edital;
+                });
+
+                $result = array_values($result);
+            }
+        });
+
+        // Remove campos de anexo da etapa 7 da tela de atualização cadastral
+        $app->hook('entity(Opportunity).registrationFileConfigurations', function(&$result) use ($app, $self) {
+            /** @var \MapasCulturais\Entities\Opportunity $this */
+
+            $controller = $app->view->controller;
+
+            $referer = php_sapi_name() != "cli" ? $app->request->getReferer() : null;
+            $registration = $app->view->controller->requestedEntity ?? null;
+            $validating = false;
+
+            if($registration instanceof Registration) {
+                $registration_url = $app->createUrl('registration', 'registrationEdit', [$registration->id]);
+                $validating = $registration_url == ($referer[0] ?? false);
+            }
+
+            if($validating || ($this->id == $app->config['rcv.opportunityId'] && $controller && $controller->action == 'registrationEdit')) {
+                $files = $app->config['rcv.removeFileFields'];
+                $result = array_filter($result, function($field) use ($files) {
+                    return !in_array($field->fileGroupName, $files);
                 });
 
                 $result = array_values($result);
@@ -1934,6 +2193,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         $app->hook('component(opportunity-phases-timeline).item:after', function () use ($app) {
             $controller = $app->view->controller;
             $certificate = null;
+            $registration = null;
 
             if ($controller->id === 'registration') {
                 /** @var Registration */
@@ -1951,7 +2211,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 }
             }
 
-            if ($certificate) {
+            if ($certificate && $registration && $registration->status == Registration::STATUS_APPROVED) {
             ?>
                 <div class="rcv-certificate-link">
                     <a class="button button--primary button--icon" href="<?= $certificate->singleUrl ?>">
@@ -1975,7 +2235,59 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         });
 
         $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:after', function($job, &$result) use($app, $theme) {
-            
+            //Remoção das coluna no envio da planilha
+            if (isset($result['rcv_tipo'])) {
+                unset($result['rcv_tipo']);
+            }
+
+            if (isset($result['rcv_locked_fields'])) {
+                unset($result['rcv_locked_fields']);
+            }
+
+            if (isset($result['ownerGeoMesoregiao'])) {
+                unset($result['ownerGeoMesoregiao']);
+            }
+
+            if (isset($result['valuersIncludeList'])) {
+                unset($result['valuersIncludeList']);
+            }
+
+            if (isset($result['valuersExcludeList'])) {
+                unset($result['valuersExcludeList']);
+            }
+
+            if (isset($result['valuers'])) {
+                unset($result['valuers']);
+            }
+
+            if (isset($result['agent'])) {
+                unset($result['agent']);
+            }
+
+            if (isset($result['attachments'])) {
+                unset($result['attachments']);
+            }
+
+            if (isset($result['projectName'])) {
+                unset($result['projectName']);
+            }
+
+            if (isset($result['editable'])) {
+                unset($result['editable']);
+            }
+
+            if (isset($result['files'])) {
+                unset($result['files']);
+            }
+
+            if (isset($result['appliedPointReward'])) {
+                unset($result['appliedPointReward']);
+            }
+
+            if (isset($result['appliedForQuota'])) {
+                unset($result['appliedForQuota']);
+            }
+
             if (isset($result['geoMesoregiao'])) {
                 unset($result['geoMesoregiao']);
             }
@@ -1987,6 +2299,11 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if (isset($result['editableUntil'])) {
                 unset($result['editableUntil']);
             }
+
+            unset($result[$app->config['rcv.namePontoColletivo']]);
+            unset($result[$app->config['rcv.nomePontaoDeCultura']]);
+
+            $keys = array_keys($result);
 
             $result['outrosSelos'] = 'Outros Selos';
             $result['idPonto'] = "Id do ponto";
@@ -2016,7 +2333,22 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 [$newKey => $newLabel] +
                 array_slice($result, $pos + 1, null, true);
             }
-           
+
+            $columnKey = null;
+            $columnLabel = 'Se sim, insira endereço do(s) espaço(s).';
+
+            if (isset($result[$columnKey])) {
+                unset($result[$columnKey]);
+            }
+
+            $keys = array_keys($result);
+            $pos = array_search($app->config['rcv.postalCode'], $keys);
+
+            if ($pos !== false) {
+                $result = array_slice($result, 0, $pos + 1, true) + 
+                [$columnKey => $columnLabel] +
+                array_slice($result, $pos + 1, null, true);
+            }
         });
 
         $app->hook('SpreadsheetJob(registrations-spreadsheets).getBatch:after', function($job, &$result) use($app, $theme) {
@@ -2024,6 +2356,59 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $verificationSeals = $app->config['rcv.verificationSeals'] ?? null;
             $legalRepKey = $app->config['rcv.legalRepresentative'] ?? null;
             foreach($result as &$entity){
+
+                //Remoção das coluna no envio da planilha
+                if (isset($entity['rcv_tipo'])) {
+                    unset($entity['rcv_tipo']);
+                }
+
+                if (isset($entity['rcv_locked_fields'])) {
+                    unset($entity['rcv_locked_fields']);
+                }
+
+                if (isset($entity['valuersIncludeList'])) {
+                    unset($entity['valuersIncludeList']);
+                }
+
+                if (isset($entity['valuersExcludeList'])) {
+                    unset($entity['valuersExcludeList']);
+                }
+
+                if (isset($entity['valuers'])) {
+                    unset($entity['valuers']);
+                }
+
+                if (isset($entity['editable'])) {
+                    unset($entity['editable']);
+                }
+
+                if (isset($entity['agent'])) {
+                    unset($entity['agent']);
+                }
+
+                if (isset($entity['projectName'])) {
+                    unset($entity['projectName']);
+                }
+
+                if (isset($entity['attachments'])) {
+                    unset($entity['attachments']);
+                }
+
+                if (isset($entity['ownerGeoMesoregiao'])) {
+                    unset($entity['ownerGeoMesoregiao']);
+                }
+
+                if (isset($entity['files'])) {
+                    unset($entity['files']);
+                }
+
+                if (isset($entity['appliedPointReward'])) {
+                    unset($entity['appliedPointReward']);
+                }
+
+                if (isset($entity['appliedForQuota'])) {
+                    unset($entity['appliedForQuota']);
+                }
 
                 if (isset($entity['geoMesoregiao'])) {
                     unset($entity['geoMesoregiao']);
@@ -2135,6 +2520,17 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     $entity['updateTimestamp'] = $dateOnly; 
                     $entity['horaAtualizacao'] = $timeOnly;
                 }
+
+                $ponto_cultura = $entity[$app->config['rcv.nameCulturePoint']] ?? null;
+                $ponto_coletivo = $entity[$app->config['rcv.namePontoColletivo']] ?? null;
+                $pontao_de_cultura = $entity[$app->config['rcv.nomePontaoDeCultura']] ?? null;
+                $valorFinal =$ponto_cultura ?:  $ponto_coletivo ?: $pontao_de_cultura;
+        
+                $entity[$app->config['rcv.nameCulturePoint']] = $valorFinal;
+        
+                // Remove os outros campos
+                unset($entity[$app->config['rcv.namePontoColletivo']]);
+                unset($entity[$app->config['rcv.nomePontaoDeCultura']]);
             }
         });
 
@@ -2178,6 +2574,101 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if($opportunity->id == $app->config['rcv.opportunityId']) {
                 $app->config['text:opportunity.single.opportunity-subscription-list.subscription-list-title'] = 'Você tem cadastros iniciados';
             }
+        });
+        
+        // Remove o selo de "Aguardando atualização" do agente coletivo quando a inscrição for enviada durante a atualização cadastral
+        $app->hook("entity(Registration).sendEditableFields:after", function () use ($app) {
+            /** @var Registration $this */
+            $opportunity = $this->opportunity;
+            $organization = $this->relatedAgents['coletivo'][0] ?? null;
+
+            if($opportunity->id == $app->config['rcv.opportunityId'] && $organization) {
+                $has_waiting_update_seal = false;
+                $seal_relations = $organization->getSealRelations();
+
+                $waiting_update_seal = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
+
+                foreach($seal_relations as $seal_relation) {
+                    if($seal_relation->seal->id == $waiting_update_seal->id) {
+                        $has_waiting_update_seal = true;
+                        break;
+                    }
+                }
+
+                if($has_waiting_update_seal) {
+                    $app->disableAccessControl();
+                    $organization->removeSealRelation($waiting_update_seal);
+                    $app->enableAccessControl();
+                }
+
+                $app->disableAccessControl();
+                $organization->rcv_last_update_timestamp = date('Y-m-d H:i:s');
+                $organization->save(true);
+                $app->enableAccessControl();
+            }
+        });
+
+        $app->hook('auth.sendEmailValidation', function(&$template_name) {
+            if ($template_name == 'email-to-validate-account.html') {
+                $template_name = 'rcv-email-to-validate-account.html';
+            }
+        });
+
+        // Altera mensagem de erro 500 na tela de inscrição para a oportunidade do pnab
+        $app->hook('component(mc-entity).texts', function(&$texts) use($app) {
+            $controller = $this->controller;
+
+            if($controller->action == 'view' && $controller->id == 'registration') {
+                $registration = $controller->requestedEntity;
+
+                if($registration->opportunity->id == $app->config['rcv.pnabOpportunityId']) {
+                    $texts['erro inesperado'] = 'Erro genérico ao processar a planilha. Por favor, contactar o suporte';
+                }
+            }
+        });
+
+
+        $app->hook('<<GET|POST>>(opportunity.<<*>>)', function() use ($app) {
+             $opportunity = $this->requestedEntity;
+             if($opportunity->id == $app->config['rcv.pnabOpportunityId'] && $app->config['rcv.disablePnabOpportunity']) {
+                $url = $app->createUrl('site', 'index', []);
+                $app->redirect($url);
+             }
+        });
+
+        $app->hook('GET(site.importer-log-view)', function() use($app) {
+            $this->requireAuthentication();
+            
+            
+            $file = PUBLIC_PATH . 'files/importer/' . $this->data['id'] . '.log';
+            if(file_exists($file)) {
+                $file_content = explode("\n", file_get_contents($file));
+                dump(array_filter($file_content));
+            }
+        });
+
+        $app->hook('POST(site.importer-log-create)', function() use($app) {
+            $this->requireAuthentication();
+            
+            $id = $this->data['id'];
+            $dir_path = PUBLIC_PATH . 'files/importer/';
+            $file = $dir_path . $id . '_status.json';
+
+            if (!file_exists($dir_path)) {
+                mkdir($dir_path, 0777, true);
+            }
+
+            if (!file_exists($file)) {
+                $data = [
+                    'status' => 0,
+                    'message' => '',
+                    'timestamp' => date('d-m-Y H:i:s')
+                ];
+
+                file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+
+            $this->json(true);
         });
 
         Importer::init($self);
@@ -2245,16 +2736,14 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
         curl_close($ch);
 
-        $response = json_decode($result, true);
-
-        $log_response = !$response  ? 'CNPJ invalido' : $response;
-
-        if($error) {
-            $log_response = $error;
-        }
+        $log_response = [
+            'error' => $error,
+            'result' => $result
+        ];
         
         $this->generateLog($cnpj, $log_response, $source);
         
+        $response = json_decode($result, true);
         return $response['responseBody'] ?? null;
     }
 
@@ -2373,7 +2862,16 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         
         $user = $app->user;
         $timestamp = date('Y-m-d H:i:s');
-        $api_response = json_encode($response);
+
+        if(json_validate($response['error'] ?? 'invalid')) {
+            $response['error'] = json_decode($response['error'], true);
+        }
+
+        if(json_validate($response['result'] ?? 'invalid')) {
+            $response['result'] = json_decode($response['result'], true);
+        }
+
+        $api_response = is_string($response) ? $response : json_encode($response);
 
         $log = "---------------------------\n";
         $log .= "Usuário: {$user}\n";
@@ -2385,5 +2883,109 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
         $log_path = PRIVATE_FILES_PATH . 'cnpj_validation_log.txt';
         file_put_contents($log_path, $log, FILE_APPEND);
+    }
+
+    public function sendMailRegistrationStatus(Registration $registration) {
+        $app = App::i();
+
+        $template = $registration->status == Registration::STATUS_APPROVED ? 'registration_approved' : 'registration_denied';
+
+        $params = [
+            "siteName" => $app->siteName,
+            "baseUrl" => $app->getBaseUrl(),
+            "userName" => $registration->owner->name,
+            "registrationNumber" => $registration->number,
+            "organizationName" => $registration->relatedAgents['coletivo'][0]->name ?? '',
+            "organizationCNPJ" => $registration->relatedAgents['coletivo'][0]->cnpj ?? null,
+            "registrationType" => $registration->category,
+        ];
+
+        if($registration->status == Registration::STATUS_APPROVED) {
+            $config_seal_id = $registration->category == $app->config['rcv.categoriesMap']['pontao'] ? $app->config['rcv.verificationSeals']['pontao'] : $app->config['rcv.verificationSeals']['ponto'];
+    
+            $seal_relation_url = '';
+            if($collective = $registration->relatedAgents['coletivo'][0] ?? null) {
+                foreach ($collective->sealRelations as $seal_relation) {
+                    if ($seal_relation->seal->id == $config_seal_id) {
+                        $seal_relation_url = $seal_relation->singleUrl;
+                        break;
+                    }
+                }
+            }
+    
+            $params['sealRelation'] = $seal_relation_url;
+        } else {
+            $params['registrationLink'] = $registration->singleUrl;
+            $params['newRegistrationLink'] = $app->createUrl('opportunity', 'single', [$registration->opportunity->id]);
+        }
+        
+        $user_email = $registration->owner->emailPrivado ?: (
+            $registration->owner->emailPublico ?: (
+                $registration->owner->email ?: ''
+            )
+        );
+
+        $content = $app->renderMailerTemplate($template, $params);
+
+        $mail = [
+            'from' => $app->config['mailer.from'],
+            'to' => $user_email,
+            'subject' => $content['title'],
+            'body' => $content['body'],
+        ];
+
+        $app->sendMailMessage($app->createMailMessage($mail), true);
+    }
+
+    function sendTransactionalEmail($template, $data = []){
+
+        $app = App::i();
+
+        $dataValue = [
+            'responsavel_nome'    => $data['owner_name'],
+            'agent_name'    => $data['agent_name'],
+            'agent_cnpj'    => $data['agent_cnpj'],
+        ];
+        
+        $message = $app->renderMailerTemplate($template, $dataValue);
+
+        $mail = [
+            'from'    => $app->config['mailer.from'],
+            'to'      => $data['email_destinatario'],
+            'subject' => $message['title'],
+            'body'    => $message['body']
+        ];
+
+        
+        $app->sendMailMessage($app->createMailMessage($mail));
+
+    }
+
+    public function sendMailRegistrationPnabDenied(Registration $registration) {
+        $app = App::i();
+
+        $template = 'registration_pnab_denied';
+
+        $params = [
+            "siteName" => $app->siteName,
+            "baseUrl" => $app->getBaseUrl(),
+            "userName" => $registration->owner->name,
+            "registrationNumber" => $registration->number,
+            "registrationLink" => $registration->singleUrl,
+            "opportunityPnabLink" => $app->createUrl('opportunity', 'single', [$registration->opportunity->id])
+        ];
+        
+        $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
+
+        $content = $app->renderMailerTemplate($template, $params);
+
+        $mail = [
+            'from' => $app->config['mailer.from'],
+            'to' => $user_email,
+            'subject' => $content['title'],
+            'body' => $content['body'],
+        ];
+
+        $app->sendMailMessage($app->createMailMessage($mail));
     }
 }

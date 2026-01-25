@@ -18,7 +18,7 @@ $this->import('
     <template #default="modal">
 
         <div v-if="!step">
-            <mc-entities type="agent" :query="query" :limit="10" watch-query>
+            <mc-entities v-if="global.auth.isLoggedIn" type="registration" :query="query" :limit="10" select="*" watch-query>
                 <template #header="{entities}">
                     <form class="select-entity__form" @submit="entities.refresh(); $event.preventDefault();">
                         <input ref="searchKeyword" placeholder="Digite para pesquisar" v-model="entities.query['@keyword']" type="text" class="select-entity__form--input" name="searchKeyword" :placeholder="placeholder" @keyup="entities.refresh(500)" />
@@ -30,17 +30,22 @@ $this->import('
 
                 <template #default="{entities}">
                     <ul class="select-entity__results scrollbar">
-                        <li v-for="agent in entities" :key="agent.id">
-                            <div :key="agent.id"  class="field">
+                        <li v-for="registration in entities" :key="registration.id">
+                            <div :key="registration.id"  class="field">
                                 <label class="input__label input__radioLabel">
-                                    <input type="radio" name="organization" v-model="organization" :value="agent">
-                                    
-                                    <span v-if="agent">
-                                        <a :href="url(agent)" target="_blank">
-                                            #{{agent.id}}
-                                        </a> - {{agent.name || agent.nomeCompleto}} 
-                                        <small v-if="agent.cnpj">(CNPJ: {{agent.cnpj}})</small>
-                                        <small v-if="!agent.cnpj">(CNPJ não informado)</small>
+                                    <input type="radio" name="organization" v-model="organization" :value="registration.relatedAgents.coletivo?.[0]">
+                                    <span v-if="registration.relatedAgents.coletivo?.[0]">
+                                        <a :href="url(registration)" target="_blank">
+                                            #{{registration.id}} ({{registration.category}})
+                                        </a> - {{registration.relatedAgents.coletivo[0].name || registration.relatedAgents.coletivo[0].nomeCompleto}} 
+                                        <small v-if="registration.category != 'Ponto de Cultura (coletivo sem CNPJ)' && registration.relatedAgents.coletivo[0].cnpj">(CNPJ: {{registration.relatedAgents.coletivo[0].cnpj}})</small>
+                                        <small v-else>(CNPJ não informado)</small>
+                                    </span>
+
+                                    <span v-if="!registration.relatedAgents.coletivo?.[0]">
+                                        <a :href="url(registration)" target="_blank">
+                                            #{{registration.id}}
+                                        </a> - <?= i::__('Sem agente relacionado') ?>
                                     </span>
                                 </label>
                             </div>

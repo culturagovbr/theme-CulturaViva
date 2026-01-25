@@ -18,6 +18,7 @@ $this->import('
     mc-status
     mc-tag-list
     registration-editable-fields
+    rcv-importer-logs
     v1-embed-tool
 ');
 
@@ -135,6 +136,10 @@ $entity = $this->controller->requestedEntity;
                 <template #eligible="{entity}">
                     <span v-if="entity.eligible"><?= i::__('Sim') ?></span>
                     <span v-else> &nbsp; </span>
+                </template>
+
+                <template #linkLog="{entity}">
+                    <rcv-importer-logs :entity="entity"></rcv-importer-logs>
                 </template>
 
                 <template #editable={entity}>
