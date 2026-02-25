@@ -1,0 +1,273 @@
+@use '../0.settings/mixins' as *;
+
+.static-page {
+    
+    & * {
+        font-family: $font-family-highlight;
+    }
+    
+    &__title {
+        background-color: var(--mc-white);
+        box-shadow: var(--mc-shadow-lv1);
+        display: grid;
+        padding: size(76) 0 size(56);
+        gap: size(8);
+        min-height: size(323);
+        position: relative;
+        text-align: center;
+        width: 100%;
+        z-index: 1;
+        text-shadow: 
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white),
+            0 0 size(1) var(--mc-white);
+
+
+        @media (max-width: size(500)){
+            min-height: inherit;
+            padding-bottom: 0;
+            padding-top: size(41);
+        }
+
+        &--update {
+            background-color: var(--mc-events-500);
+            padding: size(116) 0;
+        }
+
+        & > h2.bold {
+            color: $white;
+            position: relative;
+            top: size(40);
+            z-index: 2;
+
+
+            @media (max-width: size(500)){
+                top: size(-20);
+            }
+        }
+
+        & > h2.certificados{
+            color: initial;
+        }
+
+        & > h2{
+            text-transform: $text-transform-uppercase;
+
+            @media (max-width: size(500)){
+                font-size: $font-size-sm;
+                margin-top: size(10);
+            }
+        }
+    }
+
+    &__background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0; 
+        overflow: hidden;
+    }
+    
+    &__background > .img > img {
+        object-fit: cover;
+        
+        @media(min-width: size(1400)){
+            width: 100%; 
+            height: 100%; 
+        }
+
+        @media (max-width: size(500)){
+            display: block;
+            margin: 0 auto;
+            transform: translateX(-75%);
+            left: 75%;
+            max-width: 100%;
+            position: relative;
+            width: auto;
+            height: auto;
+        }
+    }
+
+    &__content {
+        margin: 0 auto;
+        max-width: size(732);
+        padding: size(56) size(16) size(100);
+        width: 100%;
+        display: grid;
+        gap: size(20);
+        font-family: $font-family-highlight;
+
+        & ul {
+            margin: size(8) 0;
+
+            & > li {
+                margin: size(8) 0;
+                text-align: justify;
+                display: grid;
+                gap: size(8);
+            }
+        }
+
+        & img {
+            max-width: size(600);
+            width: 100%;
+        }
+    }
+
+    &__sub {
+        margin-left: size(25);
+    }
+
+    &__accordion {
+        display: grid;
+        gap: size(20);
+    }
+
+    &__footer {
+        max-width: size(1170);
+        padding: size(39) size(16) size(100);
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        border-top: var(--mc-border-hairline);
+        gap: size(16);
+    }
+
+    &--update {
+        background-color: var(--mc-white);
+
+        & * {
+            font-family: var(--mc-font-body);
+        }
+
+        .button {
+            font-size: var(--mc-font-size-xxs);
+        }
+    }
+
+    &--update & {
+        background-color: var(--mc-white);
+
+        &__title {
+            background-color: var(--mc-events-500);
+            padding: size(116) size(28);
+            position: relative;
+
+            & * {
+                z-index: 1;
+            }
+
+            & h1 {
+                font-family: var(--mc-font-headings);
+            }
+        }
+
+        &__title-background {
+            height: 100%;
+            max-width: 1440px;
+            overflow: hidden;
+            place-content: center;
+            place-self: center;
+            position: absolute;
+            width: 100%;
+            z-index: 0;
+        }
+
+        &__first-background,
+        &__second-background,
+        &__third-background {
+            opacity: 1;
+            position: absolute;
+            transition: opacity 1s ease-in-out;
+        }
+        
+        &__first-background {
+            left: -70px;
+            top: -43px;
+
+            @media (max-width: size(600)) {
+                left: -100px;
+            }
+
+            @media (max-width: size(400)) {
+                left: -150px;
+            }
+        }
+
+        &__second-background {
+            bottom: -14px;
+            left: 131px;
+
+            @media (max-width: size(800)) {
+                opacity: 0 !important;
+            }
+        }
+
+        &__third-background {
+            right: 0;
+            top: -35px;
+            transform: rotate(45deg);
+
+            @media (max-width: size(600)) {
+                right: -70px;
+            }
+
+            @media (max-width: size(400)) {
+                right: -100px;
+            }
+        }
+
+        @include mobile {
+            &__first-background,
+            &__second-background,
+            &__third-background {
+                opacity: .8;
+            }
+        }
+
+        &__content {
+            font-family: var(--mc-font-body);
+            padding-bottom: size(65);
+        }
+
+        &__section {
+            margin: 0 auto;
+            max-width: size(570);
+            padding: size(12) 0 size(18);
+            text-align: center;
+            width: 100%;
+        }
+
+        &__big-button {
+            font-size: var(--mc-font-size-sm);
+            padding-inline: size(8);
+            min-height: size(104);
+
+            &--update {
+                max-width: size(530);
+            }
+        }
+
+        &__normal-button {
+            margin: size(12) auto size(18);
+            max-width: size(270);
+        }
+    }
+
+    .static-page__breadcrumb {
+        .mc-breadcrumb {
+            position: relative;
+
+            ul {
+                z-index: 2;
+            }
+        }
+    }
+}

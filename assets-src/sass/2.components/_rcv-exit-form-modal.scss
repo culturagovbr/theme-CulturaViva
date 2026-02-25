@@ -1,0 +1,12 @@
+.rcv-exit-form-modal{
+    .modal-content{
+        max-width: size(730);
+        width: 100%;
+
+        .button-cancel{
+            background-color: transparent;
+            border: none;
+            color: $low-light;
+        }
+    }
+}

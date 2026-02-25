@@ -1,0 +1,25 @@
+.rcv-registration-update{
+    display: flex;
+    flex-direction: column;
+    gap: size(16);
+
+    &__modal-content{
+        display: grid;
+        gap: size(24);
+    }
+
+    &__modal{
+        text-align: initial;
+        
+        .modal-content{
+            max-width: size(690);
+            width: 100%;
+
+            .modal__action{
+                & > .button{
+                    min-width: size(160);
+                }
+            }
+        }
+    }
+}

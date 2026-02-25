@@ -1,0 +1,26 @@
+.entity-links{
+    &__title{
+        font-family: $font-family-base !important;
+        font-size: $font-size-xxs !important;
+        font-weight: 900 !important;
+    }
+
+    &__links{
+        &--item{
+            .editable{
+                color: $agents-500 !important;
+            }
+        }
+    }
+
+    & > ul > li > a > .iconify{
+        color: $agents-500 !important;
+    }
+
+    &__add-link{
+        background-color: $agents-500;
+        border-color: $agents-500;
+        border-radius: $border-radius-pill;
+        color: $white;
+    }
+}

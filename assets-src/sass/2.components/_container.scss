@@ -1,0 +1,18 @@
+@use '../0.settings/mixins' as *;
+
+.container {
+    gap: size(32);
+    
+    @media screen and (min-width: size(801)) {
+        grid-template-columns: 74.19% 23.07%;
+        gap: size(32) 2.74%;
+    }
+
+    &.opportunity {
+        border-top: var(--mc-border-hairline);
+    }
+
+    aside h4 {
+        font-family: var(--mc-font-body);
+    }
+}

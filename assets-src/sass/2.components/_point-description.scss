@@ -1,0 +1,45 @@
+.rcv-point-description {
+    max-width: size(740);
+    width: 100%;
+
+    > h2{ 
+        font-family: $font-family-base;
+        font-size: $font-size-md;
+    }
+
+    &__content{
+        display: flex;
+        flex-direction: column;
+        margin-top: 1rem;
+        width: 100%;
+
+        .description, .long-description{
+            font-family: $font-family-base;
+            font-size: $font-size-xs;
+            font-weight: $font-weight-regular;
+        }
+    }
+
+    &__read-more{
+        background-color: transparent;
+        border: none;
+        cursor: pointer;
+        font-family: $font-family-base;
+        font-size: $font-size-xxxs;
+        font-weight: $font-weight-bold;
+        padding-left: 0;
+    }
+
+    &__activity{
+        margin-top: 3rem;
+
+        &-title{
+            font-family: $font-family-base;
+            font-size: $font-size-md;
+        }
+
+        & dl > dd{
+            margin-left: 0;
+        }
+    }
+}

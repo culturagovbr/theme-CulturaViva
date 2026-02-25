@@ -1,0 +1,23 @@
+@use '../0.settings/mixins'as *;
+
+
+.registration-form {
+    &__section {
+
+        .field {
+            &__error {
+                display: none;
+            }
+        
+            &:not(.modal-content .field) {
+                margin-top: 0;
+
+            }
+        }
+
+        .mc-card__content {
+            display: grid;
+            gap: size(24);
+        }
+    }
+}

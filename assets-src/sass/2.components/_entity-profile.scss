@@ -1,0 +1,23 @@
+.entity-profile{
+
+    &__profile{
+        &--img{
+            height: size(167);
+            width: size(167);
+
+            img{
+                height: size(167);
+                width: size(167);
+            }
+
+            svg{
+                height: size(87);
+                width: size(87);
+            }
+        }
+
+        &--label{
+            min-width: size(170);
+        }
+    }
+}

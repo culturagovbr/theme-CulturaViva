@@ -1,0 +1,71 @@
+@use '../0.settings/mixins'as *;
+
+.timeline {
+    .item {
+        &__dot {
+            &::before {
+                background-color: var(--mc-gray-300);
+            }
+
+            .dot {
+                background-color: var(--mc-gray-300);
+                height: size(24);
+                width: size(24);
+                border: none
+            }
+        }
+
+        &__content {
+            color: var(--mc-gray-500);
+            font-size: var(--mc-font-size-sm);
+
+            &--title {
+                line-height: size(24);
+            }
+        }
+    }
+
+    &.big {
+        .item {
+            &__dot {
+                .dot {
+                    height: size(16);
+                    width: size(16);
+                    border: none;
+                }
+            }
+
+            &__content--title {
+                line-height: size(16);
+            }
+
+            &.active {
+                .item {
+                    &__dot {
+                        .dot {
+                            height: size(40);
+                            width: size(40);
+                        }
+                    }
+
+                    &__content {
+                        color: var(--mc-black);
+
+                        &--title {
+                            line-height: size(40);
+                        }
+                    }
+                }
+                
+                &.status-10 .item__dot .dot {
+                    background-color: var(--mc-success-500);
+                }
+    
+                &.status-3 .item__dot .dot {
+                    background-color: var(--mc-danger-500);
+                } 
+            }
+
+        }
+    }
+}

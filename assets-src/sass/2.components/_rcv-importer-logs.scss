@@ -1,0 +1,21 @@
+.rcv-importer-logs{
+    &__message{
+        &_1 {
+            color: $helper-500;
+        }
+
+        &_2 {
+            color: $danger-500;
+        }
+
+        &_10 {
+            color: $success-500;
+        }
+    }
+
+    &__content{
+        p{
+            margin: 0 0 0.5rem 0;
+        }
+    }
+}

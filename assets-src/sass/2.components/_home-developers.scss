@@ -1,0 +1,18 @@
+.home-developers {
+    &__content{
+        &--title{
+            font-family: $font-family-highlight;
+            font-size: $font-size-lg;
+            font-weight: $font-weight-regular;
+
+            @include mobile{
+                font-size: $font-size-md;
+                text-align: center;
+            }
+        }
+
+        &--description{
+            font-family: $font-family-base;
+        }
+    }
+}

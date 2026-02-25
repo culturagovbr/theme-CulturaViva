@@ -1,0 +1,14 @@
+.rcv-save-later-modal{
+    .modal-content{
+        max-width: size(730);
+        width: 100%;
+
+        .modal__action{
+            .button-cancel{
+                background-color: transparent;
+                border: none;
+                color: $low-light;
+            }
+        }
+    }
+}

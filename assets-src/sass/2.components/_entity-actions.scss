@@ -1,0 +1,42 @@
+@use '../0.settings/mixins' as *;
+
+.entity-actions{
+    background-color: $high-light;
+
+    &__content {
+        justify-content: center;
+        
+        &--groupBtn {            
+            @media (max-width: size(500)) {
+                display: grid;
+            }
+        }
+
+        &--groupBtn {
+            margin-inline-end: size(25);
+
+            .button,
+            .button.publish {
+                background-color: $agents-500;
+                color: $high-light;
+                padding-left: size(15);
+                padding-right: size(15);
+            }
+        }
+    }  
+}
+
+.action-edit {
+    .entity-actions {
+        background-color: var(--mc-opportunities-500);
+
+        &__content {
+            &--groupBtn {
+                .button {
+                    background-color: var(--mc-white);
+                    color: var(--mc-opportunities-500);
+                }
+            }
+        }
+    }
+}

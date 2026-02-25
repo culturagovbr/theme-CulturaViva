@@ -1,0 +1,31 @@
+@use '../0.settings/mixins' as *;
+
+.controller-search {
+    &.action-agents,
+    &.action-spaces,
+    &.action-events {
+        .search {
+            &__header {
+                &--content--right {
+                    .button {
+                        display: none;
+                    }
+                }
+            }
+        }
+    }
+}
+
+.search {
+    &__header {
+        padding: size(45) 0 0;
+    }
+    &__tabs {
+        background-color: var(--mc-white);
+
+        .tabs-component__header {
+            padding: size(8) size(16);
+            height: size(75);
+        }
+    }
+}

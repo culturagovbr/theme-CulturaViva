@@ -1,0 +1,47 @@
+@use '../0.settings/mixins' as *;
+
+.mc-header-menu {
+    &--item {
+        &:hover{
+            .icon {
+                background-color: var(--mc-agents-500) !important;
+            }
+
+            .label {                    
+                color: var(--mc-agents-500) !important;
+            }
+        }        
+    }
+}
+
+.action-events .mc-header-menu--item.event .icon {
+    background-color: var(--mc-agents-500) !important;
+}
+
+.action-events .mc-header-menu--item.event .label {
+    color: var(--mc-agents-500) !important;
+}
+
+.action-agents .mc-header-menu--item.agent .icon {
+    background-color: var(--mc-agents-500) !important;
+}
+
+.action-agents .mc-header-menu--item.agent .label {
+    color: var(--mc-agents-500) !important;
+}
+
+.action-spaces .mc-header-menu--item.space .icon {
+    background-color: var(--mc-agents-500) !important;
+}
+
+.action-spaces .mc-header-menu--item.space .label {
+    color: var(--mc-agents-500) !important;
+}
+
+.controller-opportunity.cadastro .mc-header-menu--item.register .icon {
+    background-color: var(--mc-agents-500) !important;
+}
+
+.controller-opportunity.cadastro .mc-header-menu--item.register .label {
+    color: var(--mc-agents-500) !important;
+}

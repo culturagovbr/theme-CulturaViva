@@ -1,0 +1,138 @@
+@use '../0.settings/mixins' as *;
+
+.home-entities {
+    background-color: transparent;
+    padding: size(20) size(16);
+
+    &__content{
+        &--cards{
+            display: flex;
+            flex-wrap: wrap;
+
+            @media (max-width: size(800)) {
+                flex-direction: column; 
+            }
+
+            @media (max-width: size(480)) {
+                flex-direction: column; 
+            }
+
+            .card{
+                display: flex;
+                border-radius: size(16) 0 0 size(16);
+                min-height: 9.75rem;
+                overflow: hidden;
+                width: 100%;
+
+                @media (max-width: size(800)) {
+                    flex-direction: row;
+                    width: 100%;
+
+                    &__left, &__right {
+                        width: 50%;
+                    }
+                }
+
+                @media (max-width: size(600)) {
+                    flex-direction: column; 
+                    max-height: unset;
+                    border-radius: $border-radius-sm*2;
+
+                    &__left--content {
+                        & > img {
+                            height: auto;
+                        }
+                    } 
+                }
+
+                &__left {
+                    display: flex;
+                    align-items: center;
+
+                    @media (max-width: size(600)) {
+                        max-height: size(150);
+                        width: 100%; 
+                        text-align: center; 
+                    }
+
+                    &--img {
+                        position: absolute;
+                        z-index: 0;
+                    }
+
+                    &--content{
+                        grid-template-columns: size(64) 1fr;
+                        background-color: rgba(0, 0, 0, 0.1);
+                        gap: size(15);
+                        z-index: 1;
+                        
+                        &-title{
+                            font-family: $font-family-base;
+
+                            @include mobile {
+                                text-align: left;
+                                width: 100%;
+                            }
+                        }
+
+                        .space__background{
+                            display: flex;
+                            justify-content: center;
+
+                            & > img{
+                                height: 4.188rem;
+                            }
+                        }
+                    }
+                }
+
+                &__right{
+                    flex-direction: column;
+                    align-items: flex-start;
+                    border-radius: size(0) size(16) size(16) size(0);
+                    padding: size(32) size(30) size(20) size(32);
+
+                    @media (max-width: size(600)) {
+                        padding: size(24) size(14) size(14) !important;
+                        width: 100%; 
+                        text-align: center; 
+                        padding: 0;
+                    }
+
+                    & > p {
+                        font-family: $font-family-base;
+                        text-align: start;
+                    }
+
+                    & > a{
+                        color: #000;
+                        font-weight: $font-weight-bold;
+                        font-size: var(--mc-font-size-xs);
+                        gap: size(14);
+
+                        & > .iconify {
+                            font-size: var(--mc-font-size-sm);
+                        }
+                    }
+                }
+            }
+        }
+
+        &--header{
+            .title{
+                font-family: var(--mc-font-headings);
+                font-size: var(--mc-font-size-lg);
+                font-weight: var(--mc-font-regular);
+                margin: 0 auto;
+                text-align: center;
+                
+                @media (max-width: size(480)) {
+                    font-family: var(--mc-font-body);
+                    font-size: $font-size-md; 
+                    font-weight: var(--mc-font-bold);
+                    max-width: size(327);
+                }
+            }
+        }
+    }
+}

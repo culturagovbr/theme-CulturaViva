@@ -1,0 +1,53 @@
+@use '../0.settings/mixins' as *;
+
+.mc-breadcrumb {
+    margin: 0 auto;
+    max-width: size(1440);
+    padding: 0 size(35);
+
+    ul {
+        width: fit-content;
+    }
+
+    li {
+        @media (max-width: size(800)) {
+            &::before {
+                content: url('https://api.iconify.design/fe/arrow-left.svg?width=12&height=12');
+                opacity: .4;
+                width: size(12);
+            }
+        }
+
+        @media (min-width: size(801)) {
+            &::after {
+                content: url('https://api.iconify.design/fe/arrow-right.svg?width=12&height=12');
+                opacity: .4;
+                width: size(12);
+            }
+        }
+    }
+
+    li:last-child {
+        font-weight: var(--mc-font-bold);
+
+        & > a {
+            font-weight: var(--mc-font-bold);
+            cursor: default;
+        }
+    }
+
+    a {
+        font-size: var(--mc-font-size-xxxs);
+        font-weight: var(--mc-font-regular);
+        color: var(--mc-gray-500);
+        text-transform: none;
+    }
+
+    &__hasCover {
+        max-width: size(1170);
+        padding: 0;
+        & > ul {
+            width: 100%;
+        }
+    }
+}

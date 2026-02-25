@@ -1,0 +1,78 @@
+@use '../0.settings/mixins' as *;
+
+.controller-panel {
+    &.action-index {
+        .panel {
+            .panel__main {
+                .panel-home {
+                    &__header {
+                        &--user {
+                            justify-content: space-between;
+                            gap: size(32);
+                        }
+    
+                        &--user-button {
+                            flex-wrap: wrap;
+                            justify-content: flex-end;
+                        }
+                    }
+                }
+            }
+
+            .tab-component{
+                .panel-home__tabs--main{
+                    .panel--entities-summary{
+                        &__card{
+                            &--create{
+                                display: none;
+                            }
+                        }
+                    }
+
+                    .projeto{
+                        display: none;
+                    }
+                }
+            }
+        }
+    }
+
+    &.action-my-account{
+        .panel{
+            &__main{
+                .user-management{
+                    &__header{
+                        &-content{
+                            .user-management__user{
+                                &-delete{
+                                    display: none;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    &.action-agents,
+    &.action-spaces,
+    &.action-events {
+        .panel {
+            .tabs-component__button {
+                &.archived {
+                    display: none;
+                }
+            }
+
+            &-page {
+                &__header-actions {
+                    display: none;
+                }
+                
+            }
+        }
+    }
+}
+
+

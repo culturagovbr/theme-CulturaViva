@@ -1,0 +1,36 @@
+.complaint-sugestion__complaint {
+    display: flex;
+    gap: size(35);
+
+    .denuncia{
+        border-color: $opportunities-500 !important;
+        color: $opportunities-500 !important;
+    }
+
+    &-owner{
+        background-color: $opportunities-500;
+        border: 1px solid $opportunities-500;
+        border-radius: $border-radius-sm;
+        color: $white;
+        cursor: pointer;
+        font-weight: $font-weight-semibold;
+        min-width: size(270);
+        padding: 8px 44px 10px 44px;
+    }
+    
+}
+
+.complaint-suggestion{
+    flex-direction: column;
+    
+    &__wrapper {
+        display: flex;
+        gap: size(16);
+    }
+    
+    &__title{
+        font-family: $font-family-base;
+        font-size: $font-size-md;
+        font-weight: $font-weight-bold;
+    }
+}

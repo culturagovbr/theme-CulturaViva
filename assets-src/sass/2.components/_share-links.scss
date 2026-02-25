@@ -1,0 +1,18 @@
+.mc-share-links{
+    .mc-share-button{
+        background-color: transparent;
+        border-radius: $border-radius-sm;
+        border: 2px solid $agents-500;
+        color: $agents-500;
+        cursor: pointer;
+        font-family: $font-family-base;
+        font-size: $font-size-xxs;
+        padding: 8px 16px;
+    }
+
+    .mc-share-options{
+        display: flex;
+        justify-content: space-around;
+        padding-top: 1rem;
+    }
+}

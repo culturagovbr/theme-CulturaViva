@@ -1,0 +1,303 @@
+<?php
+/**
+ * @var \MapasCulturais\Themes\BaseV2\Theme $this
+ * @var \MapasCulturais\App $app
+ */
+
+use MapasCulturais\i;
+
+$this->layout = 'registrations';
+
+$this->addOpportunityPhasesToJs();
+$this->addRegistrationPhasesToJs();
+
+$this->import('
+    mc-alert
+    mc-avatar
+    mc-breadcrumb
+    mc-status
+    mc-card
+    mc-link
+    mc-tab
+    mc-tabs
+    opportunity-header
+    opportunity-phases-timeline
+    registration-print
+    v1-embed-tool
+    registration-evaluation-tab
+');
+
+$this->breadcrumb = [
+    ['label' => i::__('Inicio'), 'url' => $app->createUrl('panel', 'index')],
+    ['label' => $entity->opportunity->name, 'url' => $app->createUrl('opportunity', 'single', [$entity->opportunity->id])],
+    ['label' => $this->text('my_records_form', i::__('Inscrição'))]
+];
+
+$entity = $entity->firstPhase;
+
+$today = new DateTime();
+?>
+
+<div class="main-app registration single">
+    <mc-breadcrumb></mc-breadcrumb>
+    <opportunity-header :opportunity="entity.opportunity"></opportunity-header>
+    <!-- <registration-print :registration="entity"></registration-print> -->
+    <mc-tabs sync-hash>
+        <?php $this->applyTemplateHook('single-tab', 'begin') ?>
+        
+        <mc-tab label="<?= i::_e('Acompanhamento') ?>" slug="acompanhamento">
+            <div class="registration__content">
+                <mc-card>
+                    <template #content>
+
+                        <div class="registration-info">
+
+                            <div class="registration-info__header">
+                                <div class="registration-info__agent">
+                                    <mc-avatar :entity="entity.owner" size="small"></mc-avatar>
+                                    <div class="registration-info__agent-name"> {{entity.owner.name}} </div>
+                                </div>
+                                
+                                <div class="registration-info__data">
+                                    <div class="registration-info__data-label"> <?= $this->text('registration_number', i::__('Nº de inscrição')) ?> </div>
+                                    <div class="registration-info__data-info"> {{entity.number}} </div>
+                                </div>
+
+                                <div class="registration-info__data" v-if="entity.opportunity.registrationCategories?.length > 0">
+                                    <div class="registration-info__data-label"> <?= $this->text('registration_category', i::__('Categoria de inscrição')) ?> </div>
+                                    <div v-if="entity.category" class="registration-info__data-info"> {{entity.category}} </div>
+                                    <div v-if="!entity.category" class="registration-info__data-info"> <?= i::__('Sem categoria') ?> </div>
+                                </div>
+
+                                <div class="registration-info__data">
+                                    <div class="registration-info__data-label"> <?= $this->text('registration_status', i::__('Status da inscrição')) ?> </div>
+                                    <div class="registration-info__data-info"> 
+                                        <mc-status v-if="entity.status == 0" status-name="<?= i::esc_attr_e('Não enviada') ?>"></mc-status>
+                                        <mc-status v-if="entity.status == 1" status-name="<?= i::esc_attr_e('Enviada') ?>"></mc-status>
+                                        <mc-status v-if="entity.status == 10" status-name="<?= i::esc_attr_e('Selecionada') ?>"></mc-status>
+                                        <mc-status v-if="entity.status == 3" status-name="<?= i::esc_attr_e('Não selecionada') ?>"></mc-status>
+                                    </div>
+                                </div>
+
+                                    <!-- <span v-if="entity.status == 0"> <?= i::__('Não enviada') ?> </span>
+                                    <span v-if="entity.status > 0"> <?= i::__('Enviada') ?> </span> -->
+                                
+                            </div>
+
+                            <div class="registration-info__footer">
+                                <div v-if="entity.projectName" class="project">
+                                    <div class="project__label"> <?= i::__('Nome do projeto') ?> </div>
+                                    <div class="project__name project__color"> {{entity.projectName}} </div>
+                                </div>
+                                <div v-if="entity.sentTimestamp" class="sentDate"> 
+                                    <?= $this->text('registration_info__footer', i::__('Inscrição realizada em')) ?> {{entity.sentTimestamp.date('2-digit year')}} <?= i::__('às') ?> {{entity.sentTimestamp.time('long')}} 
+                                </div>
+                                <div v-if="!entity.sentTimestamp" class="sentDate">
+                                    <?= i::__('Inscrição sem data de envio.') ?><br>
+                                    <small><em>
+                                        <?= i::__('Isto pode ter acontecido por uma mudança do status da inscrição, pelo gestor ou administrador da oportunidade, diretamente do status de rascunho para o de enviada, inválida, não selecionada, suplente ou selecionada sem que o botão de enviar inscrição tenha sido apertado.') ?>
+                                    </em></small>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </template>
+                </mc-card>
+
+                <mc-card>
+                    <template #content>
+
+                        <opportunity-phases-timeline :entity-status="entity.status" center big></opportunity-phases-timeline>
+
+                    </template>
+                </mc-card>
+            </div>
+        </mc-tab>
+
+        <mc-tab label="<?= $this->text('registration_form', i::__('Ficha de inscrição')) ?>" slug="ficha">
+            <div class="registration__content">
+                <mc-card v-if="entity.agentsData.owner">
+                    <template #content>
+                        <div class="registered-info">
+                            <span class="info"> 
+                                <strong><?= i::__('Dados do proponente') ?></strong> 
+                            </span>
+                            <span class="info" v-if="entity.agentsData.owner?.name"> 
+                                <strong> <?= i::__('Nome') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.name}}</span>
+                            </span>
+                            <span class="info" v-if="entity.agentsData.owner?.shortDescription"> 
+                                <strong> <?= i::__('Descrição curta') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.shortDescription}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.documento || entity.agentsData.owner?.cnpj"> 
+                                <strong> <?= i::__('CPF ou CNPJ') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.documento || entity.agentsData.owner?.cnpj}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.dataDeNascimento"> 
+                                <strong> <?= i::__('Data de nascimento ou fundação') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.dataDeNascimento}}</span><!-- .date('2-digit year') -->
+                            </span>  
+                            <span class="info" v-if="entity.agentsData.owner?.emailPublico"> 
+                                <strong> <?= i::__('Email') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.emailPublico}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.raca"> 
+                                <strong> <?= i::__('Raça') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.raca}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.genero"> 
+                                <strong> <?= i::__('Genero') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.genero}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.endereco"> 
+                                <strong> <?= i::__('Endereço') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.endereco}}</span>
+                            </span>                            
+                            <span class="info" v-if="entity.agentsData.owner?.En_CEP"> 
+                                <strong> <?= i::__('CEP') ?>: </strong> 
+                                <span>{{entity.agentsData.owner?.En_CEP}}</span>
+                            </span>
+                        </div>
+                    </template>
+                </mc-card>
+
+                <mc-card v-if="entity.opportunity.projectName && entity.opportunity.projectName !== 0">
+                    <template #content>
+                        <div class="registered-info">
+                            <span class="info"> 
+                                <strong> <?= i::__('Nome do Projeto') ?> </strong> 
+                            </span>
+                            <span class="info" vf-if="entity.projectName"> 
+                                <span> {{entity.projectName}}</span>
+                            </span>
+                            <span class="info" v-if="!entity.projectName">
+                                <?= i::__('Nome do projeto não informado') ?>
+                            </div>
+                    </template>
+                </mc-card>
+
+                <mc-card v-if="entity.opportunity.useAgentRelationColetivo && entity.opportunity.useAgentRelationColetivo !== 'dontUse'"> 
+                    <template #title>
+                        <label> <?= i::__('Coletivo') ?> </label>
+                    </template>
+                    <template #content>
+                        <div v-if="entity.agentRelations.hasOwnProperty('coletivo') && entity.agentRelations.coletivo[0]" class="space">
+                            <mc-avatar :entity="entity.agentRelations.coletivo[0].agent" size="xsmall"></mc-avatar>
+                            <div class="name">
+                                <a :href="entity?.agentRelations.coletivo[0].agent.singleUrl" class="registration__collective-link bold" :class="[entity.agentRelations.coletivo[0]['@entityType'] + '__color']"> {{entity?.agentRelations.coletivo[0].agent.name}} </a>
+                            </div>
+                        </div>
+                        <div v-if="!entity.agentRelations.hasOwnProperty('coletivo')" class="space">
+                        <div class="image">
+                                <mc-icon name="agent-2"></mc-icon>
+                            </div>
+                            <div class="name">
+                                <?= i::__('Coletivo não informado') ?>
+                            </div>
+                        </div>
+                    </template>
+                </mc-card>
+                
+
+                <mc-card v-if="entity.opportunity.useAgentRelationInstituicao && entity.opportunity.useAgentRelationInstituicao !== 'dontUse'"> 
+                    <template #title>
+                        <label> <?= i::__('Instituição responsável') ?> </label>
+                    </template>
+                    <template #content>
+                        <div v-if="entity.agentRelations.hasOwnProperty('instituicao') && entity.agentRelations.instituicao[0]" class="space">
+                            <mc-avatar :entity="entity.agentRelations.instituicao[0].agent" size="xsmall"></mc-avatar>
+                            <div class="name">
+                                <a :href="entity?.agentRelations.instituicao[0].agent.singleUrl" class="registration__institution-link" :class="[entity.agentRelations.instituicao[0]['@entityType'] + '__color']"> {{entity?.agentRelations.instituicao[0].agent.name}} </a>
+                            </div>
+                        </div>
+
+                        <div v-if="!entity.agentRelations.hasOwnProperty('instituicao')" class="space">
+                            <div class="image">
+                                <mc-icon name="agent"></mc-icon>
+                            </div>
+                            <div class="name">
+                                <?= i::__('Instituição responsável não informada') ?>
+                            </div>
+                        </div>
+                    </template>
+                </mc-card>
+
+                <mc-card v-if="entity.opportunity.useSpaceRelationIntituicao && entity.opportunity.useSpaceRelationIntituicao !== 'dontUse'"> 
+                    <template #title>
+                        <label> <?= i::__('Espaço Vinculado') ?> </label>
+                    </template>
+                    <template #content>
+                        <div v-if="entity.relatedSpaces[0]" class="space">
+                            <mc-avatar :entity="entity.relatedSpaces[0]" size="xsmall"></mc-avatar>
+                            <div class="name">
+                                <a href="entity?.relatedSpaces[0]?.singleUrl" class="registration__space-link" :class="[entity.relatedSpaces[0]['@entityType'] + '__color']"> {{entity?.relatedSpaces[0]?.name}} </a>
+                            </div>
+                        </div>
+
+                        <div v-if="!entity.relatedSpaces[0]" class="space">
+                        <div class="image">
+                                <mc-icon name="space"></mc-icon>
+                            </div>
+                            <div class="name">
+                                <?= i::__('Sem espaço vinculado') ?>
+                            </div>
+                        </div>
+                    </template>
+                </mc-card>
+
+                <?php $phase = $entity;
+                while($phase): $opportunity = $phase->opportunity;?>
+                    <?php if($opportunity->isDataCollection && $phase->canUser('view')):?>
+                        <?php if($opportunity->isFirstPhase):?>
+                            <h2><?= $this->text('my_records_form', i::__('Inscrição')) ?></h2>
+                        <?php else: ?>
+                            <h2><?= $opportunity->name ?></h2>
+                        <?php endif ?>
+                        <?php if($phase->status < 1 && !$opportunity->isFirstPhase && $today <= $opportunity->registrationTo): ?>
+                            <mc-alert type="warning">
+                                <?= i::__('Nesta etapa, é necessário inserir informações. Por favor, clique no botão para acessar o formulário e preenchê-lo') ?> <br>
+                                <?= i::__('dentro do período de') ?>  <?=$phase->opportunity->registrationFrom->format("d/m/Y")?> <?= i::__('à') ?> <?=$phase->opportunity->registrationTo->format("d/m/Y H:i:s")?>
+                            </mc-alert>
+                            <div class="grid-12">
+                                <div class="col-3 sm:col-12">
+                                    <a class="button button--primary" href="<?=$app->createUrl("registration", "edit", [$phase->id])?>"><?= i::__('Preencher formulário') ?></a>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <?php $this->applyTemplateHook("registration-form-view", 'before', [$phase]) ?>
+                            <v1-embed-tool route="registrationview" :id="<?=$phase->id?>"></v1-embed-tool>
+                            <?php $this->applyTemplateHook("registration-form-view", 'after', [$phase]) ?>
+                        <?php endif ?>
+                    <?php endif ?>
+                    <?php $phase = $phase->nextPhase; ?>
+                <?php endwhile ?>
+
+            </div>
+        </mc-tab>
+
+        <mc-tab v-if="entity.opportunity.currentUserPermissions['@control']" label="<?= i::_e('Avaliadores') ?>" slug="valuers">
+            <div class="registration__content">
+                <mc-tabs>
+                <?php $phase = $entity; 
+                    while($phase):
+                        if (!($emc = $phase->opportunity->evaluationMethodConfiguration)) {
+                            $phase = $phase->nextPhase; 
+                            continue;
+                        }
+                        ?>
+                        <mc-tab label="<?= htmlspecialchars($emc->name) ?>" slug="valuers-<?= $phase->opportunity->id ?>">
+                            <mc-card>
+                                <registration-evaluation-tab :phase-id="<?= $phase->opportunity->id ?>"></registration-evaluation-tab>
+                            </mc-card>
+                        </mc-tab>
+                    <?php $phase = $phase->nextPhase;
+                    endwhile ?>
+                </mc-tabs>
+            </div>
+        </mc-tab>
+        
+        <?php $this->applyTemplateHook('single-tab', 'end') ?>
+    </mc-tabs>
+</div>
