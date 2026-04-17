@@ -40,7 +40,13 @@ $this->import('
                     </template>
 
                     <!-- logado -->
-                    <template v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ" #default>
+                    <template v-if="global.auth.isLoggedIn && hasCnpjExternalOrgConflict && !nextStep && !verifiedCNPJ" #default>
+                        <div class="rcv-point-subscription__subscription__card__modal">
+                            <p><?= i::__('Este CNPJ já está vinculado a outra organização.<br> Se precisar de ajuda para regularizar o cadastro, entre em contato com <a href="mailto:suporte.culturaviva@cultura.gov.br" class="rcv-cnpj-conflict-modal__support-mail"><strong>suporte.culturaviva@cultura.gov.br</strong></a>.') ?></p>
+                        </div>
+                    </template>
+
+                    <template v-else-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ" #default>
                         <div class="field">
                             <div class="field">
                                 <label><?= i::__("CNPJ da instituição") ?>
@@ -110,7 +116,12 @@ $this->import('
                             <button v-if="global.auth.isLoggedIn && errorSituacaoCadastral && !isLoading" class="button button--icon button--md rcv-point-subscription__subscription__card__verify" @click="modal.close()"> <?= i::__('Ok') ?></button>
                             <button v-if="global.auth.isLoggedIn && nextStep && verifiedCNPJ && !naturezaJuridicaInvalida && !isLoading" class="button button--icon button--md rcv-point-subscription__subscription__card__verify" :class="{'disabled' : hasError}" @click="confirmAndSubscribe()"><?= i::__('Cadastrar') ?></button>
                         </div>
-                        <div v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType" class="rcv-point-subscription__subscription__card__buttons">
+                        <div v-if="global.auth.isLoggedIn && hasCnpjExternalOrgConflict && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType" class="rcv-point-subscription__subscription__card__buttons">
+                            <button type="button" class="button button--icon button--md rcv-point-subscription__subscription__card__verify" @click="hasCnpjExternalOrgConflict = false">
+                                <?= i::__('Ok') ?>
+                            </button>
+                        </div>
+                        <div v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType && !hasCnpjExternalOrgConflict" class="rcv-point-subscription__subscription__card__buttons">
                             <mc-loading v-if="isLoading" :condition="isLoading" :entity="entity"></mc-loading>
                             <button v-if="!isLoading" @click="verifyCNPJ" class="button button--icon button--md rcv-point-subscription__subscription__card__verify"><?= i::__('Verificar CNPJ') ?></button>
                         </div>
@@ -248,7 +259,13 @@ $this->import('
                     </template>
 
                     <!-- logado -->
-                    <template v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ" #default>
+                    <template v-if="global.auth.isLoggedIn && hasCnpjExternalOrgConflict && !nextStep && !verifiedCNPJ" #default>
+                        <div class="rcv-point-subscription__subscription__card__modal">
+                            <p><?= i::__('Este CNPJ já está vinculado a outra organização.<br> Se precisar de ajuda para regularizar o cadastro, entre em contato com <a href="mailto:suporte.culturaviva@cultura.gov.br" class="rcv-cnpj-conflict-modal__support-mail"><strong>suporte.culturaviva@cultura.gov.br</strong></a>.') ?></p>
+                        </div>
+                    </template>
+
+                    <template v-else-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ" #default>
                         <div class="field">
                             <div class="field">
                                 <label><?= i::__("CNPJ da instituição") ?>
@@ -327,7 +344,12 @@ $this->import('
                             </button>
                         </div>
 
-                        <div v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType" class="rcv-point-subscription__subscription__card__buttons">
+                        <div v-if="global.auth.isLoggedIn && hasCnpjExternalOrgConflict && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType" class="rcv-point-subscription__subscription__card__buttons">
+                            <button type="button" class="button button--icon rcv-point-subscription__subscription__card__verify" @click="hasCnpjExternalOrgConflict = false">
+                                <?= i::__('Ok') ?>
+                            </button>
+                        </div>
+                        <div v-if="global.auth.isLoggedIn && !nextStep && !verifiedCNPJ && !invalidPrincipalAgent && !invalidAgentType && !hasCnpjExternalOrgConflict" class="rcv-point-subscription__subscription__card__buttons">
                             <mc-loading v-if="isLoading" :condition="isLoading" :entity="entity"></mc-loading>
                             <button v-if="!isLoading" @click="verifyCNPJ" class="button button--icon rcv-point-subscription__subscription__card__verify"><?= i::__('Verificar CNPJ') ?></button>
                         </div>
