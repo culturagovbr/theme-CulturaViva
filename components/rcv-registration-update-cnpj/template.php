@@ -58,7 +58,11 @@ $route = $app->createUrl('auth');
             </mc-entities>
         </div>
 
-        <div v-if="step=='get-cnpj'" class="rcv-registration-update__modal-content">
+        <div v-if="step=='get-cnpj' && hasCnpjExternalOrgConflict" class="rcv-registration-update__modal-content">
+            <p><?= i::__('Este CNPJ já está vinculado a outra organização.<br> Se precisar de ajuda para regularizar o cadastro, entre em contato com <a href="mailto:suporte.culturaviva@cultura.gov.br" class="rcv-cnpj-conflict-modal__support-mail"><strong>suporte.culturaviva@cultura.gov.br</strong></a>.') ?></p>
+        </div>
+
+        <div v-else-if="step=='get-cnpj'" class="rcv-registration-update__modal-content">
             <div class="field">
                 <input type="text" v-maska data-maska="##.###.###/####-##" v-model="cnpj"/>
                 <span v-if="invalidCNPJ" class="field__error"><?= i::__('Ops! Não foi possível fazer a consulta. Tente novamente mais tarde') ?></span>
@@ -104,7 +108,11 @@ $route = $app->createUrl('auth');
             <?= i::__('Confirmar') ?>
         </button>
 
-        <button v-if="global.auth.isLoggedIn && step=='get-cnpj'" class="button button--primary" :class="[{'disabled' : disableButton}]" @click="verifyCNPJ()">
+        <button v-if="global.auth.isLoggedIn && step=='get-cnpj' && hasCnpjExternalOrgConflict" type="button" class="button button--icon button--md rcv-point-subscription__subscription__card__verify" @click="hasCnpjExternalOrgConflict = false">
+            <?= i::__('Ok') ?>
+        </button>
+
+        <button v-if="global.auth.isLoggedIn && step=='get-cnpj' && !hasCnpjExternalOrgConflict" class="button button--icon button--md rcv-point-subscription__subscription__card__verify" :class="[{'disabled' : disableButton}]" @click="verifyCNPJ()">
             <?= i::__('Verificar CNPJ') ?>
         </button>
 

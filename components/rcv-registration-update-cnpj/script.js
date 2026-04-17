@@ -48,6 +48,8 @@ app.component('rcv-registration-update-cnpj', {
             apiInfo: null,
             opportunity: $MAPAS.config.rcvRegistrationUpdateCnpj.opportunity,
             status: $MAPAS.config.rcvRegistrationUpdateCnpj.status,
+            /** Mesma regra do novo cadastro: bloqueia só se o CNPJ estiver em PJ de terceiro */
+            hasCnpjExternalOrgConflict: false,
         };
     },
 
@@ -77,6 +79,9 @@ app.component('rcv-registration-update-cnpj', {
             const global = useGlobalState();
 
             if (global.auth.isLoggedIn) {
+                if (this.hasCnpjExternalOrgConflict && this.step === 'get-cnpj') {
+                    return 'CNPJ já vinculado a outra organização';
+                }
                 switch (this.step) {
                     case 'get-cnpj':
                         return 'Informe o novo CNPJ da organização';
@@ -135,25 +140,46 @@ app.component('rcv-registration-update-cnpj', {
             this.invalidCNPJ = false;
             this.situacaoCadastralError = '';
             this.apiInfo = null;
+            this.hasCnpjExternalOrgConflict = false;
         },
 
         saveRegistrationInfo(registration) {
             this.registrationInfo = registration;
         },
 
-        verifyCNPJ() {
+        async verifyCNPJ() {
             let returnApi = false;
 
-            let url = Utils.createUrl('site/valida-cnpj', '');
-            let api = new API();
-            let data = { cnpj: this.cnpj };
-            
+            const checkConflictUrl = Utils.createUrl('site/check-cnpj-org-conflict', '');
+            const validateCnpjUrl = Utils.createUrl('site/valida-cnpj', '');
+            const api = new API();
+
+            const excludeAgentId = this.registrationInfo?.relatedAgents?.coletivo?.[0]?.id;
+
             this.disableButton = true;
-            api.POST(url, data).then(res => res.json()).then(data => {
+            this.hasCnpjExternalOrgConflict = false;
+
+            try {
+                const payload = { cnpj: this.cnpj };
+                if (excludeAgentId) {
+                    payload.excludeAgentId = excludeAgentId;
+                }
+
+                const checkRes = await api.POST(checkConflictUrl, payload);
+                const checkData = await checkRes.json();
+                if (checkData.conflict) {
+                    this.hasCnpjExternalOrgConflict = true;
+                    this.disableButton = false;
+
+                    return;
+                }
+
+                const res = await api.POST(validateCnpjUrl, { cnpj: this.cnpj });
+                const data = await res.json();
                 returnApi = data?.data ?? data;
                 this.hasError = data?.error || false;
-                this.disableButton = true;
-                
+                this.disableButton = false;
+
                 if(!returnApi) {
                     this.invalidCNPJ = true;
                 } else if(returnApi == 'natureza-juridica-invalida') {
@@ -166,7 +192,10 @@ app.component('rcv-registration-update-cnpj', {
                     this.situacaoCadastralError = returnApi;
                     this.changeStep('situacao-cadastral');
                 }
-            })
+            } catch (error) {
+                console.error(error);
+                this.disableButton = false;
+            }
         },
 
         updateCNPJ(modal) {
