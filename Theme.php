@@ -464,6 +464,27 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->errorJson(false);
         });
 
+        // Pré-validação: CNPJ já usado em PJ que o usuário não administra? (novo cadastro + alterar CNPJ)
+        $app->hook('POST(site.check-cnpj-org-conflict)', function () use ($app, $theme) {
+            $this->requireAuthentication();
+
+            $cnpjRaw = $this->data['cnpj'] ?? '';
+            $cnpjDigits = preg_replace('/\D/', '', (string) $cnpjRaw);
+            if (strlen($cnpjDigits) !== 14) {
+                $this->json(['conflict' => false]);
+
+                return;
+            }
+
+            $excludeAgentId = isset($this->data['excludeAgentId']) && $this->data['excludeAgentId'] !== ''
+                ? (int) $this->data['excludeAgentId']
+                : null;
+
+            $this->json([
+                'conflict' => $theme->isCnpjLinkedToOrganizationOutsideUserControl($app, $cnpjDigits, $excludeAgentId),
+            ]);
+        });
+
         // Termo de adesão
         $app->hook('GET(site.termoAdesao)', function() use($app) {
             $this->render('termo-adesao', []);
@@ -2959,6 +2980,56 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         
         $app->sendMailMessage($app->createMailMessage($mail));
 
+    }
+
+    /**
+     * IDs de agentes que já têm esse CNPJ em agent_meta (chaves cnpj ou documento), sem depender da máscara.
+     *
+     * @return list<int>
+     */
+    public function getDistinctAgentIdsWithCnpjInMetadata(App $app, string $cnpjDigits): array
+    {
+        $conn = $app->em->getConnection();
+        $sql = <<<'SQL'
+            SELECT DISTINCT object_id
+            FROM agent_meta
+            WHERE key IN ('cnpj', 'documento')
+              AND regexp_replace(COALESCE(value, ''), '[^0-9]', '', 'g') = :digits
+            SQL;
+
+        $rows = $conn->fetchFirstColumn($sql, ['digits' => $cnpjDigits]);
+
+        return array_map(static fn ($id): int => (int) $id, $rows);
+    }
+
+    /**
+     * Retorna true se existir algum agente com esse CNPJ que o usuário atual não controla (@control).
+     * Novo cadastro e alteração de CNPJ usam a mesma regra: vários PJs "meus" com o mesmo número não bloqueiam.
+     * Em alteração, passamos excludeAgentId para ignorar o coletivo da inscrição e avaliar só o restante.
+     */
+    public function isCnpjLinkedToOrganizationOutsideUserControl(App $app, string $cnpjDigits, ?int $excludeAgentId): bool
+    {
+        $agentIds = $this->getDistinctAgentIdsWithCnpjInMetadata($app, $cnpjDigits);
+
+        if ($excludeAgentId !== null) {
+            $agentIds = array_values(array_filter(
+                $agentIds,
+                static fn (int $id): bool => $id !== $excludeAgentId
+            ));
+        }
+
+        $user = $app->user;
+        foreach ($agentIds as $agentId) {
+            $agent = $app->repo('Agent')->find($agentId);
+            if (!$agent instanceof Agent) {
+                continue;
+            }
+            if (!$agent->canUser('@control', $user)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function sendMailRegistrationPnabDenied(Registration $registration) {
