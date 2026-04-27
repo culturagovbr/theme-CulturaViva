@@ -51,7 +51,6 @@ app.component('rcv-point-subscription' , {
             invalidPrincipalAgent: false,
             agentType: $MAPAS.user.profile?.type?.id,
             invalidAgentType: this.agentType === 2,
-            /** Exibe aviso quando o CNPJ está em uso por organização de outro titular */
             hasCnpjExternalOrgConflict: false,
         };
     },
@@ -208,7 +207,7 @@ app.component('rcv-point-subscription' , {
             }
         },
 
-        // Antes da Receita: só barra se o CNPJ estiver em PJ que o usuário não administra
+        // Antes da Receita: conflito de CNPJ conforme regra no endpoint (inscrições RCV)
         async verifyCNPJ() {
             let returnApi = false;
 
@@ -220,7 +219,11 @@ app.component('rcv-point-subscription' , {
             this.hasCnpjExternalOrgConflict = false;
 
             try {
-                const checkRes = await api.POST(checkConflictUrl, { cnpj: this.cnpj });
+                const checkPayload = { cnpj: this.cnpj };
+                if (this.subscriptionType === 'ponto-entidade' || this.subscriptionType === 'pontao') {
+                    checkPayload.subscriptionType = this.subscriptionType;
+                }
+                const checkRes = await api.POST(checkConflictUrl, checkPayload);
                 const checkData = await checkRes.json();
                 if (checkData.conflict) {
                     this.hasCnpjExternalOrgConflict = true;

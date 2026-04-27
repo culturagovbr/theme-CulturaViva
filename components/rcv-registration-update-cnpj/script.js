@@ -48,7 +48,6 @@ app.component('rcv-registration-update-cnpj', {
             apiInfo: null,
             opportunity: $MAPAS.config.rcvRegistrationUpdateCnpj.opportunity,
             status: $MAPAS.config.rcvRegistrationUpdateCnpj.status,
-            /** Mesma regra do novo cadastro: bloqueia só se o CNPJ estiver em PJ de terceiro */
             hasCnpjExternalOrgConflict: false,
         };
     },

@@ -464,7 +464,9 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->errorJson(false);
         });
 
-        // Pré-validação: CNPJ já usado em PJ que o usuário não administra? (novo cadastro + alterar CNPJ)
+        // Pré-validação CNPJ: inscrições RCV (coletivo + meta). Alterar CNPJ: excludeAgentId + categoria pelo coletivo.
+        // Novo cadastro: opcional subscriptionType ponto-entidade|pontao (bloqueia só essa modalidade se já existir).
+        // Sem subscriptionType: só bloqueia “lotado” (já tem Ponto e Pontão) ou 2+ Pontões — não bloqueia só por vários Pontos (ex.: permite seguir para Pontão no curl/UI legada).
         $app->hook('POST(site.check-cnpj-org-conflict)', function () use ($app, $theme) {
             $this->requireAuthentication();
 
@@ -480,9 +482,56 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 ? (int) $this->data['excludeAgentId']
                 : null;
 
-            $this->json([
-                'conflict' => $theme->isCnpjLinkedToOrganizationOutsideUserControl($app, $cnpjDigits, $excludeAgentId),
-            ]);
+            $categoriesMap = $app->config['rcv.categoriesMap'] ?? [];
+            $pontoLabel = $categoriesMap['ponto-entidade'] ?? '';
+            $pontaoLabel = $categoriesMap['pontao'] ?? '';
+
+            if ($excludeAgentId !== null) {
+                $subscriptionKey = $theme->getRcvSubscriptionTypeKeyByColetivoAgentId($app, $excludeAgentId);
+                $categoryLabel = null;
+                if ($subscriptionKey === 'ponto-entidade') {
+                    $categoryLabel = $pontoLabel;
+                } elseif ($subscriptionKey === 'pontao') {
+                    $categoryLabel = $pontaoLabel;
+                }
+
+                if ($categoryLabel === null || $categoryLabel === '') {
+                    $this->json(['conflict' => false]);
+
+                    return;
+                }
+
+                $conflict = $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
+                    $app,
+                    $cnpjDigits,
+                    $categoryLabel,
+                    $excludeAgentId
+                ) > 0;
+            } else {
+                $nPonto = $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
+                    $app,
+                    $cnpjDigits,
+                    $pontoLabel,
+                    null
+                );
+                $nPontao = $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
+                    $app,
+                    $cnpjDigits,
+                    $pontaoLabel,
+                    null
+                );
+
+                $subscriptionKey = $this->data['subscriptionType'] ?? null;
+                if ($subscriptionKey === 'ponto-entidade') {
+                    $conflict = $nPonto >= 1;
+                } elseif ($subscriptionKey === 'pontao') {
+                    $conflict = $nPontao >= 1;
+                } else {
+                    $conflict = $nPontao >= 2 || ($nPonto >= 1 && $nPontao >= 1);
+                }
+            }
+
+            $this->json(['conflict' => $conflict]);
         });
 
         // Termo de adesão
@@ -2983,53 +3032,94 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
     }
 
     /**
-     * IDs de agentes que já têm esse CNPJ em agent_meta (chaves cnpj ou documento), sem depender da máscara.
-     *
-     * @return list<int>
+     * Chave ponto-entidade|pontao conforme a inscrição RCV ligada ao agente coletivo (ex.: fluxo alterar CNPJ com excludeAgentId).
      */
-    public function getDistinctAgentIdsWithCnpjInMetadata(App $app, string $cnpjDigits): array
+    public function getRcvSubscriptionTypeKeyByColetivoAgentId(App $app, int $coletivoAgentId): ?string
     {
+        if ($coletivoAgentId <= 0) {
+            return null;
+        }
+
+        $opportunityId = (int) $app->config['rcv.opportunityId'];
+        $categoriesMap = $app->config['rcv.categoriesMap'] ?? [];
         $conn = $app->em->getConnection();
-        $sql = <<<'SQL'
-            SELECT DISTINCT object_id
-            FROM agent_meta
-            WHERE key IN ('cnpj', 'documento')
-              AND regexp_replace(COALESCE(value, ''), '[^0-9]', '', 'g') = :digits
-            SQL;
+        $registrationObjectType = Registration::class;
 
-        $rows = $conn->fetchFirstColumn($sql, ['digits' => $cnpjDigits]);
+        $sql = "
+            SELECT r.category
+            FROM registration r
+            INNER JOIN agent_relation ar ON ar.object_id = r.id
+                AND ar.object_type = '{$registrationObjectType}'
+                AND ar.type = 'coletivo'
+            WHERE ar.agent_id = :agentId
+              AND r.opportunity_id = :oppId
+              AND r.status != :trash
+            LIMIT 1
+        ";
 
-        return array_map(static fn ($id): int => (int) $id, $rows);
+        $category = $conn->fetchOne($sql, [
+            'agentId' => $coletivoAgentId,
+            'oppId' => $opportunityId,
+            'trash' => Registration::STATUS_TRASH,
+        ]);
+
+        if (!is_string($category) || $category === '') {
+            return null;
+        }
+
+        if ($category === ($categoriesMap['ponto-entidade'] ?? '')) {
+            return 'ponto-entidade';
+        }
+        if ($category === ($categoriesMap['pontao'] ?? '')) {
+            return 'pontao';
+        }
+
+        return null;
     }
 
     /**
-     * Retorna true se existir algum agente com esse CNPJ que o usuário atual não controla (@control).
-     * Novo cadastro e alteração de CNPJ usam a mesma regra: vários PJs "meus" com o mesmo número não bloqueiam.
-     * Em alteração, passamos excludeAgentId para ignorar o coletivo da inscrição e avaliar só o restante.
+     * Inscrições na oportunidade Cultura Viva com agente coletivo contendo o CNPJ e a categoria informados (Ponto entidade ou Pontão).
      */
-    public function isCnpjLinkedToOrganizationOutsideUserControl(App $app, string $cnpjDigits, ?int $excludeAgentId): bool
-    {
-        $agentIds = $this->getDistinctAgentIdsWithCnpjInMetadata($app, $cnpjDigits);
+    public function countRcvRegistrationsWithColetivoCnpjAndCategory(
+        App $app,
+        string $cnpjDigits,
+        string $categoryLabel,
+        ?int $excludeColetivoAgentId
+    ): int {
+        $opportunityId = (int) $app->config['rcv.opportunityId'];
+        $conn = $app->em->getConnection();
+        $registrationObjectType = Registration::class;
 
-        if ($excludeAgentId !== null) {
-            $agentIds = array_values(array_filter(
-                $agentIds,
-                static fn (int $id): bool => $id !== $excludeAgentId
-            ));
+        $params = [
+            'digits' => $cnpjDigits,
+            'category' => $categoryLabel,
+            'oppId' => $opportunityId,
+            'trash' => Registration::STATUS_TRASH,
+        ];
+        $excludeSql = '';
+        if ($excludeColetivoAgentId !== null) {
+            $excludeSql = ' AND ar.agent_id <> :excludeAgentId';
+            $params['excludeAgentId'] = $excludeColetivoAgentId;
         }
 
-        $user = $app->user;
-        foreach ($agentIds as $agentId) {
-            $agent = $app->repo('Agent')->find($agentId);
-            if (!$agent instanceof Agent) {
-                continue;
-            }
-            if (!$agent->canUser('@control', $user)) {
-                return true;
-            }
-        }
+        $sql = "
+            SELECT COUNT(DISTINCT r.id)
+            FROM registration r
+            INNER JOIN agent_relation ar ON ar.object_id = r.id
+                AND ar.object_type = '{$registrationObjectType}'
+                AND ar.type = 'coletivo'
+            INNER JOIN agent_meta am ON am.object_id = ar.agent_id
+                AND am.key IN ('cnpj', 'documento')
+                AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
+            WHERE r.opportunity_id = :oppId
+              AND r.category = :category
+              AND r.status != :trash
+            {$excludeSql}
+        ";
 
-        return false;
+        $count = $conn->fetchFirstColumn($sql, $params);
+
+        return (int) ($count[0] ?? 0);
     }
 
     public function sendMailRegistrationPnabDenied(Registration $registration) {
