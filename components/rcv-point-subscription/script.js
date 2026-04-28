@@ -51,6 +51,7 @@ app.component('rcv-point-subscription' , {
             invalidPrincipalAgent: false,
             agentType: $MAPAS.user.profile?.type?.id,
             invalidAgentType: this.agentType === 2,
+            hasCnpjExternalOrgConflict: false,
         };
     },
 
@@ -80,6 +81,9 @@ app.component('rcv-point-subscription' , {
 
             if (this.loggedOut) {
                 return this.text('Ops! Você precisa fazer login para acessar o Cadastro');
+
+            } else if (this.hasCnpjExternalOrgConflict) {
+                return this.text('CNPJ já vinculado a outra organização');
 
             } else if(!error && this.loading) {
                 return this.text('Buscando por suas organizações');
@@ -180,6 +184,7 @@ app.component('rcv-point-subscription' , {
             this.isCertificated = false;
             this.invalidPrincipalAgent = false;
             this.invalidAgentType = false;
+            this.hasCnpjExternalOrgConflict = false;
 
             this.modalLoggedOut();
         },
@@ -202,15 +207,33 @@ app.component('rcv-point-subscription' , {
             }
         },
 
-        verifyCNPJ() {
+        // Antes da Receita: conflito de CNPJ conforme regra no endpoint (inscrições RCV)
+        async verifyCNPJ() {
             let returnApi = false;
 
-            let url = Utils.createUrl('site/valida-cnpj', '');
-            let api = new API();
-            let data = { cnpj: this.cnpj };
-            
+            const checkConflictUrl = Utils.createUrl('site/check-cnpj-org-conflict', '');
+            const validateCnpjUrl = Utils.createUrl('site/valida-cnpj', '');
+            const api = new API();
+
             this.isLoading = true;
-            api.POST(url, data).then(res => res.json()).then(data => {
+            this.hasCnpjExternalOrgConflict = false;
+
+            try {
+                const checkPayload = { cnpj: this.cnpj };
+                if (this.subscriptionType === 'ponto-entidade' || this.subscriptionType === 'pontao') {
+                    checkPayload.subscriptionType = this.subscriptionType;
+                }
+                const checkRes = await api.POST(checkConflictUrl, checkPayload);
+                const checkData = await checkRes.json();
+                if (checkData.conflict) {
+                    this.hasCnpjExternalOrgConflict = true;
+                    this.isLoading = false;
+
+                    return;
+                }
+
+                const res = await api.POST(validateCnpjUrl, { cnpj: this.cnpj });
+                const data = await res.json();
                 this.isLoading = false;
                 returnApi = data?.data ?? data;
                 this.hasError = data?.error || false;
@@ -240,7 +263,10 @@ app.component('rcv-point-subscription' , {
                     this.invalidCNPJ = returnApi;
                     this.rfData = returnApi;
                 }
-            })
+            } catch (error) {
+                console.error(error);
+                this.isLoading = false;
+            }
         },
 
         async createOrganization(returnApi = false) {
