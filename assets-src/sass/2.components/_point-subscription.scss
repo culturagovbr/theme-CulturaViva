@@ -159,3 +159,9 @@
         }
     }
 }
+
+// E-mail de suporte no modal de CNPJ: mesmo padrão do rodapé (Contato por e-mail)
+.rcv-cnpj-conflict-modal__support-mail {
+    color: $agents-500;
+    font-weight: $font-weight-regular;
+}
