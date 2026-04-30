@@ -12,7 +12,7 @@ class ImportRegistrationsJob extends JobType
     const SLUG = "importRegistrations";
 
     protected function _generateId(array $data, string $start_string, string $interval_string, int $iterations) {
-        return "importRegistrations:{$data['registration']->id}";
+        return "importRegistrations:{$data['registration_id']}";
     }
 
     protected function _execute(Job $job) {
@@ -21,7 +21,11 @@ class ImportRegistrationsJob extends JobType
         /** @var \MapasCulturais\Connection */
         $conn = $app->em->getConnection();
 
-        $registration = $job->registration;
+        $registration_id = (int) $job->registration_id;
+        $registration = $app->repo('Registration')->find($registration_id);
+        if (!$registration) {
+            throw new \Exception("Inscrição {$registration_id} não encontrada.");
+        }
         $app->clearHooks('entity(Registration).insert:finish');
         Importer::$registration = $registration;
 

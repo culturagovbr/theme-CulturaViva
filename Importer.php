@@ -115,7 +115,8 @@ class Importer {
 
             if ($file = self::getRegistrationFile($this)) {
                 $params = [
-                    'registration' => $this
+                    // Não enviar a entidade inteira para o Job (evita payload grande e erros ao persistir).
+                    'registration_id' => $this->id
                 ];
 
                 $app->enqueueJob("importRegistrations", $params);
@@ -1785,17 +1786,6 @@ class Importer {
             $line = $decision['line'];
 
             try {
-                if ($i > 0 && $i % 50 === 0) {
-                    $app->em->flush();
-                    $app->em->clear();
-                    $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
-                    $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
-
-                    self::reattachDecisionEntities($decision);
-
-                    $app->log->debug("[IMPORT] em->clear() executado na iteração {$i}");
-                }
-
                 // Ajustes diferidos da Fase A
                 self::applyDeferredWrites($decision);
 
@@ -1815,6 +1805,14 @@ class Importer {
                     'timestamp' => date('d-m-Y H:i:s'),
                 ]);
 
+                // Compacta o decision para reduzir memória (Fase C só precisa de scenario + email + line).
+                // Evita manter em RAM: row, entidades Doctrine e estruturas de deferred.
+                $decision = [
+                    'line'     => $line,
+                    'scenario' => $decision['scenario'] ?? null,
+                    'email'    => $decision['email'] ?? [],
+                ];
+
             } catch (\Throwable $e) {
                 self::generateImporterLog($pnab_reg,
                     "[{$line}/{$total}] Cenário {$decision['scenario']} ERRO: " . $e->getMessage());
@@ -1823,34 +1821,6 @@ class Importer {
         }
 
         return $plan;
-    }
-
-    /**
-     * Após em->clear(), reanexa entidades do RowDecision recarregando por ID.
-     * Evita operar em entidades detached após limpeza do EntityManager.
-     */
-    private static function reattachDecisionEntities(array &$decision): void {
-        $app = App::i();
-
-        if ($decision['registration'] && $decision['registration']->id) {
-            $decision['registration'] = $app->repo('Registration')->find($decision['registration']->id);
-        }
-
-        if ($decision['organization'] && $decision['organization']->id) {
-            $decision['organization'] = $app->repo('Agent')->find($decision['organization']->id);
-        }
-
-        if ($decision['owner'] && $decision['owner']->id) {
-            $decision['owner'] = $app->repo('Agent')->find($decision['owner']->id);
-        }
-
-        $reattached = [];
-        foreach ($decision['deferred']['clear_cpf_agents'] as $agent) {
-            if ($agent && $agent->id) {
-                $reattached[] = $app->repo('Agent')->find($agent->id);
-            }
-        }
-        $decision['deferred']['clear_cpf_agents'] = $reattached;
     }
 
     // -------------------------------------------------------------------------
