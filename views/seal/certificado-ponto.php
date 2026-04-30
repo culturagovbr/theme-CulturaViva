@@ -26,7 +26,10 @@ $estado = $isOutsideBrazil ? $ponto->En_EstadoPontaPontao : $ponto->En_Estado;
 $pais = $pais == 'BR' ? 'Brasil' : $pais;
 
 if ($isOutsideBrazil && $pais) {
-    $address = "<p>{$pais}</p>";
+    $address = "
+        <p>{$pais}</p>
+        <p>{$municipio}</p>
+    ";
 } elseif ($pais && $municipio && $estado) {
     $address = "
         <p>{$pais}</p>
