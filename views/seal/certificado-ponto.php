@@ -1,5 +1,6 @@
 <?php
 /**
+ * @var MapasCulturais\App $app
  * @var MapasCulturais\Entities\SealRelation $relation
  */
 
@@ -18,14 +19,22 @@ if($ponto->rcv_last_update_timestamp) {
 }
 
 $address = "";
-$pais = $ponto->En_Pais ?: $app->config['app.defaultCountry'];
+$isOutsideBrazil = $ponto->rcv_org_brasil === 'Não';
+$pais = $isOutsideBrazil ? $ponto->paisPontaPontao : ($ponto->En_Pais ?: $app->config['app.defaultCountry']);
+$municipio = $isOutsideBrazil ? $ponto->En_MunicipioPontaPontao : $ponto->En_Municipio;
+$estado = $isOutsideBrazil ? $ponto->En_EstadoPontaPontao : $ponto->En_Estado;
 $pais = $pais == 'BR' ? 'Brasil' : $pais;
 
-if ($ponto->En_Pais && $ponto->En_Municipio && $ponto->En_Estado) {
+if ($isOutsideBrazil && $pais) {
     $address = "
         <p>{$pais}</p>
-        <p>{$ponto->En_Municipio}</p>
-        <p>{$ponto->En_Estado}</p>
+        <p>{$municipio}</p>
+    ";
+} elseif ($pais && $municipio && $estado) {
+    $address = "
+        <p>{$pais}</p>
+        <p>{$municipio}</p>
+        <p>{$estado}</p>
     ";
 } else {
     $address = "<p>".i::__('Não se aplica')."</p>";

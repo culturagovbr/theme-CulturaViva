@@ -1,5 +1,6 @@
 <?php
 /**
+ * @var MapasCulturais\App $app
  * @var MapasCulturais\Entities\SealRelation $relation
  */
 use MapasCulturais\i;
@@ -11,20 +12,28 @@ $pontao = $relation->owner;
 $creationDate = $relation->createTimestamp->format('d/m/Y');
 $updateDate = null;
 
-if($ponto->rcv_last_update_timestamp) {
-    $last_update = new \DateTime($ponto->rcv_last_update_timestamp);
+if($pontao->rcv_last_update_timestamp) {
+    $last_update = new \DateTime($pontao->rcv_last_update_timestamp);
     $updateDate = $last_update->format('d/m/Y');
 }
 
 $address = "";
-$pais = $pontao->En_Pais ?: $app->config['app.defaultCountry'];
+$isOutsideBrazil = $pontao->rcv_org_brasil === 'Não';
+$pais = $isOutsideBrazil ? $pontao->paisPontaPontao : ($pontao->En_Pais ?: $app->config['app.defaultCountry']);
+$municipio = $isOutsideBrazil ? $pontao->En_MunicipioPontaPontao : $pontao->En_Municipio;
+$estado = $isOutsideBrazil ? $pontao->En_EstadoPontaPontao : $pontao->En_Estado;
 $pais = $pais == 'BR' ? 'Brasil' : $pais;
 
-if ($pontao->En_Pais && $pontao->En_Municipio && $pontao->En_Estado) {
+if ($isOutsideBrazil && $pais) {
     $address = "
         <p>{$pais}</p>
-        <p>{$pontao->En_Municipio}</p>
-        <p>{$pontao->En_Estado}</p>
+        <p>{$municipio}</p>
+    ";
+} elseif ($pais && $municipio && $estado) {
+    $address = "
+        <p>{$pais}</p>
+        <p>{$municipio}</p>
+        <p>{$estado}</p>
     ";
 } else {
     $address = "<p>".i::__('Não se aplica')."</p>";
