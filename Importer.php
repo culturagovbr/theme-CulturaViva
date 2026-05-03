@@ -806,6 +806,25 @@ class Importer {
     // Fase A: buscas read-only e montagem do plano de execução
     // -------------------------------------------------------------------------
 
+    private static function entityId($entity): ?int {
+        return $entity ? (int) $entity->id : null;
+    }
+
+    private static function entityIds(array $entities): array {
+        return array_values(array_filter(array_map(
+            fn($entity) => self::entityId($entity),
+            $entities
+        )));
+    }
+
+    private static function findEntityById(string $repository, ?int $id) {
+        if (!$id) {
+            return null;
+        }
+
+        return App::i()->repo($repository)->find($id);
+    }
+
     /**
      * Busca uma inscrição existente compatível com a linha, sem executar writes.
      *
@@ -1026,15 +1045,15 @@ class Importer {
      */
     public static function resolveRowScenario(object $row, int $line, array $cleared_agent_ids = []): array {
         $decision = [
-            'line'         => $line,
-            'row'          => $row,
-            'scenario'     => null,
-            'registration' => null,
-            'organization' => null,
-            'owner'        => null,
-            'deferred'     => [
-                'clear_cpf_agents'   => [],
-                'set_org_cnpj'       => null,
+            'line'            => $line,
+            'row'             => $row,
+            'scenario'        => null,
+            'registration_id' => null,
+            'organization_id' => null,
+            'owner_id'        => null,
+            'deferred'        => [
+                'clear_cpf_agent_ids' => [],
+                'set_org_cnpj'        => null,
             ],
             'email' => [
                 'to'                  => $row->responsavel_email,
@@ -1049,8 +1068,8 @@ class Importer {
 
         // Cenário 5: CPF conflitante (organização vinculada a outro responsável)
         if ($org = self::findOrganizationFromOtherAgentReadOnly($row)) {
-            $decision['scenario']     = 5;
-            $decision['organization'] = $org;
+            $decision['scenario']        = 5;
+            $decision['organization_id'] = self::entityId($org);
             $decision['email']['organization_name'] = $org->name;
             $decision['email']['organization_cnpj'] = $org->cnpj;
             return $decision;
@@ -1058,9 +1077,9 @@ class Importer {
 
         // Cenário 1: inscrição já existe no cadastro
         if ($result = self::findRegistrationByRowReadOnly($row)) {
-            $decision['scenario']     = 1;
-            $decision['registration'] = $result['registration'];
-            $decision['organization'] = $result['organization'];
+            $decision['scenario']        = 1;
+            $decision['registration_id'] = self::entityId($result['registration']);
+            $decision['organization_id'] = self::entityId($result['organization']);
             $decision['email']['registration_id']     = $result['registration']->id;
             $decision['email']['registration_number'] = $result['registration']->number;
             $decision['email']['user_name']           = $result['registration']->owner->name;
@@ -1071,24 +1090,24 @@ class Importer {
 
         // Cenário 2: organização existe, mas a inscrição ainda não
         if ($result = self::findOrganizationByRowReadOnly($row, $cleared_agent_ids)) {
-            $decision['scenario']     = 2;
-            $decision['organization'] = $result['organization'];
-            $decision['owner']        = $result['owner'];
+            $decision['scenario']        = 2;
+            $decision['organization_id'] = self::entityId($result['organization']);
+            $decision['owner_id']        = self::entityId($result['owner']);
             $decision['email']['user_name']           = $result['organization']->parent->name;
             $decision['email']['organization_name']   = $result['organization']->name;
             $decision['email']['organization_cnpj']   = $result['organization']->cnpj;
 
-            $decision['deferred']['clear_cpf_agents'] = $result['deferred']['clear_cpf_agents'];
-            $decision['deferred']['set_org_cnpj']     = $result['deferred']['set_org_cnpj'];
+            $decision['deferred']['clear_cpf_agent_ids'] = self::entityIds($result['deferred']['clear_cpf_agents']);
+            $decision['deferred']['set_org_cnpj']        = $result['deferred']['set_org_cnpj'];
             return $decision;
         }
 
         // Cenário 3.1: owner existe, mas não há organização nem inscrição
         if ($result = self::findOrganizationOwnerByRowReadOnly($row, $cleared_agent_ids)) {
             $decision['scenario'] = 3.1;
-            $decision['owner']    = $result['owner'];
+            $decision['owner_id'] = self::entityId($result['owner']);
             $decision['email']['user_name'] = $result['owner']->name;
-            $decision['deferred']['clear_cpf_agents'] = $result['deferred']['clear_cpf_agents'];
+            $decision['deferred']['clear_cpf_agent_ids'] = self::entityIds($result['deferred']['clear_cpf_agents']);
             return $decision;
         }
 
@@ -1121,9 +1140,10 @@ class Importer {
         $data_range = array_values($data_range);
 
         $plan = [
-            'pnab_registration' => $pnab_registration,
-            'total_rows'        => count($data_range),
-            'rows'              => [],
+            'pnab_registration'    => $pnab_registration,
+            'pnab_registration_id' => $pnab_registration->id,
+            'total_rows'           => count($data_range),
+            'rows'                 => [],
         ];
 
         $cleared_agent_ids = [];
@@ -1134,8 +1154,8 @@ class Importer {
             $row      = self::normalizeRow($row);
             $decision = self::resolveRowScenario($row, $line, $cleared_agent_ids);
 
-            foreach ($decision['deferred']['clear_cpf_agents'] as $agent) {
-                $cleared_agent_ids[$agent->id] = true;
+            foreach ($decision['deferred']['clear_cpf_agent_ids'] as $agent_id) {
+                $cleared_agent_ids[$agent_id] = true;
             }
 
             $plan['rows'][] = $decision;
@@ -1620,7 +1640,12 @@ class Importer {
         $app = App::i();
 
         // Limpa CPF de agentes desativados identificados na Fase A
-        foreach ($decision['deferred']['clear_cpf_agents'] as $agent) {
+        foreach ($decision['deferred']['clear_cpf_agent_ids'] as $agent_id) {
+            $agent = self::findEntityById('Agent', $agent_id);
+            if (!$agent) {
+                throw new \Exception("Agente {$agent_id} não encontrado para limpeza de CPF durante a importação.");
+            }
+
             $app->disableAccessControl();
             $agent->cpf = null;
             $agent->save();
@@ -1628,10 +1653,19 @@ class Importer {
         }
 
         // Completa CNPJ na organização quando estava ausente (cenário 2)
-        if ($decision['deferred']['set_org_cnpj'] && $decision['organization']) {
+        if ($decision['deferred']['set_org_cnpj'] && !$decision['organization_id']) {
+            throw new \Exception('Organização ausente para atualização de CNPJ durante a importação.');
+        }
+
+        if ($decision['deferred']['set_org_cnpj']) {
+            $organization = self::findEntityById('Agent', $decision['organization_id']);
+            if (!$organization) {
+                throw new \Exception("Organização {$decision['organization_id']} não encontrada para atualização de CNPJ durante a importação.");
+            }
+
             $app->disableAccessControl();
-            $decision['organization']->cnpj = $decision['deferred']['set_org_cnpj'];
-            $decision['organization']->save();
+            $organization->cnpj = $decision['deferred']['set_org_cnpj'];
+            $organization->save();
             $app->enableAccessControl();
         }
     }
@@ -1655,34 +1689,43 @@ class Importer {
         $app      = App::i();
         $row      = $decision['row'];
         $scenario = $decision['scenario'];
+        $registration = self::findEntityById('Registration', $decision['registration_id'] ?? null);
+        $organization = self::findEntityById('Agent', $decision['organization_id'] ?? null);
+        $owner = self::findEntityById('Agent', $decision['owner_id'] ?? null);
 
         // Cenário 5 não altera dados; apenas notificação
         if ($scenario == 5) {
             return;
         }
 
-        // Cenário 1: inscrição já existe
-        if ($scenario == 1) {
-            $registration = $decision['registration'];
-            $organization = $decision['organization'];
+        if ($scenario == 1 && (!$registration || !$organization)) {
+            throw new \Exception('Inscrição ou organização do cenário 1 não encontrada durante a importação.');
+        }
+
+        if ($scenario == 2 && !$organization) {
+            throw new \Exception('Organização do cenário 2 não encontrada durante a importação.');
+        }
+
+        if ($scenario == 3.1 && !$owner) {
+            throw new \Exception('Responsável do cenário 3.1 não encontrado durante a importação.');
         }
 
         // Cenário 2: organização existe, criar inscrição
         if ($scenario == 2) {
-            $organization = $decision['organization'];
             $registration = self::createRegistration($row, $organization);
+            $decision['registration_id'] = $registration->id;
             $decision['email']['registration_id']     = $registration->id;
             $decision['email']['registration_number'] = $registration->number;
         }
 
         // Cenário 3.1: owner existe, criar organização e inscrição
         if ($scenario == 3.1) {
-            $owner        = $decision['owner'];
             $organization = self::createOrganization($row, $owner);
             $registration = self::createRegistration($row, $organization);
             $organization->rcv_registration = $registration;
             $organization->save();
-            $decision['organization'] = $organization;
+            $decision['organization_id'] = $organization->id;
+            $decision['registration_id'] = $registration->id;
             $decision['email']['registration_id']     = $registration->id;
             $decision['email']['registration_number'] = $registration->number;
         }
@@ -1694,8 +1737,9 @@ class Importer {
             $registration = self::createRegistration($row, $organization);
             $organization->rcv_registration = $registration;
             $organization->save();
-            $decision['organization'] = $organization;
-            $decision['owner']        = $owner;
+            $decision['owner_id']        = $owner->id;
+            $decision['organization_id'] = $organization->id;
+            $decision['registration_id'] = $registration->id;
             $decision['email']['user_name']           = $owner->name;
             $decision['email']['registration_id']     = $registration->id;
             $decision['email']['registration_number'] = $registration->number;
@@ -1778,7 +1822,11 @@ class Importer {
         $app   = App::i();
         $total = $plan['total_rows'];
 
-        $pnab_reg      = $plan['pnab_registration'];
+        $pnab_reg = self::findEntityById('Registration', $plan['pnab_registration_id'] ?? self::entityId($plan['pnab_registration']));
+        if (!$pnab_reg) {
+            throw new \Exception('Inscrição PNAB não encontrada durante a aplicação da importação.');
+        }
+
         $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
         $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
 
@@ -1813,12 +1861,22 @@ class Importer {
                     'email'    => $decision['email'] ?? [],
                 ];
 
+                $app->em->clear();
+                $pnab_reg = self::findEntityById('Registration', $plan['pnab_registration_id']);
+                if (!$pnab_reg) {
+                    throw new \Exception('Inscrição PNAB não encontrada durante a importação.');
+                }
+                $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
+                $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
+
             } catch (\Throwable $e) {
                 self::generateImporterLog($pnab_reg,
                     "[{$line}/{$total}] Cenário {$decision['scenario']} ERRO: " . $e->getMessage());
                 throw $e;
             }
         }
+
+        $plan['pnab_registration'] = self::findEntityById('Registration', $plan['pnab_registration_id']);
 
         return $plan;
     }

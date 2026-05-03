@@ -51,6 +51,10 @@ class ImportRegistrationsJob extends JobType
             $conn->beginTransaction();
 
             $plan = Importer::applyExecutionPlan($plan);
+            $registration = $app->repo('Registration')->find($registration_id);
+            if (!$registration) {
+                throw new \Exception("Inscrição {$registration_id} não encontrada após aplicar a importação.");
+            }
 
             $conn->commit();
             $app->enableAccessControl();
@@ -97,7 +101,14 @@ class ImportRegistrationsJob extends JobType
             if ($conn->isTransactionActive()) {
                 $conn->rollBack();
             }
+            $app->em->clear();
             $app->enableAccessControl();
+
+            $registration = $app->repo('Registration')->find($registration_id);
+            if (!$registration) {
+                $app->log->error("Inscrição {$registration_id} não encontrada ao tratar falha de importação: {$e->getMessage()}");
+                return false;
+            }
 
             try {
                 Importer::sendEmailError($registration, $e);
