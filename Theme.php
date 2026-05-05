@@ -19,7 +19,7 @@ use MapasCulturais\Entities\RegistrationEvaluation;
 use MapasCulturais\Entities\RegistrationSpaceRelation;
 use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
 
-class Theme extends \MapasCulturais\Themes\BaseV2\Theme
+class Theme extends \BaseTheme\Theme
 {
 
     protected Opportunity $opportunity;
