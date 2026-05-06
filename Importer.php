@@ -49,6 +49,11 @@ class Importer {
 
     public static Registration $registration;
 
+    private const BR_UFS = [
+        'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+        'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+    ];
+
     static $types = [
         'pontao' => [
             'Pontão',
@@ -1501,10 +1506,16 @@ class Importer {
                     $errors[] = "Linha: {$line} - Campo 'Nome do responsável' obrigatório.";
                 }
             } elseif($key == 'ponto_uf') {
-                if(empty($row->ponto_uf)) {
+                $uf = $field_value;
+
+                if ($uf === '') {
                     $errors[] = "Linha: {$line} - Campo 'Estado' obrigatório.";
-                } elseif(strlen($row->ponto_uf) != 2 ) {
-                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Deve conter a sigla do estado.";
+                } elseif (strlen($uf) !== 2) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Deve conter a sigla do estado (2 letras).";
+                } elseif ($uf !== strtoupper($uf)) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Use a sigla em caixa alta (ex.: SP).";
+                } elseif (!in_array($uf, self::BR_UFS, true)) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Informe uma UF brasileira válida (ex.: SP, RJ, DF).";
                 }
             } elseif($key == 'ponto_municipio') {
                 if(empty($row->ponto_municipio)) {
