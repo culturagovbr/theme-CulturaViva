@@ -360,6 +360,11 @@ class Importer {
                 return [$field_file_id => $headerErrors];
             }
 
+            $highestColumn = strtoupper((string) $sheet->getHighestColumn());
+            if ($highestColumn !== 'M') {
+                return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+            }
+
             $highestRow = (int) $sheet->getHighestRow();
             if ($highestRow < 2) {
                 return [$field_file_id => [i::__('A planilha deve conter pelo menos uma linha de dados.')]];
