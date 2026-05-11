@@ -1114,6 +1114,7 @@ class Importer {
             $decision['scenario']        = 1;
             $decision['registration_id'] = self::entityId($result['registration']);
             $decision['organization_id'] = self::entityId($result['organization']);
+            $decision['owner_id']        = self::entityId($result['registration']->owner ?? null);
             $decision['email']['registration_id']     = $result['registration']->id;
             $decision['email']['registration_number'] = $result['registration']->number;
             $decision['email']['user_name']           = $result['registration']->owner->name;
@@ -1880,13 +1881,15 @@ class Importer {
                 // Aplicação do cenário
                 self::applyScenario($decision, $importer_seal, $waiting_seal, $pnab_reg);
 
+                $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
+
                 // Persistência por linha
                 $app->em->flush();
 
                 // Progresso
                 $percentage = number_format((($i + 1) / $total) * 100, 1) . '%';
                 self::generateImporterLog($pnab_reg,
-                    "[{$line}/{$total}] Cenário {$decision['scenario']} importado com sucesso");
+                    "[{$line}/{$total}] Cenário {$decision['scenario']} importado com sucesso{$context}");
                 self::updateImporterStatusFile($pnab_reg, [
                     'status'    => 1,
                     'message'   => $percentage,
@@ -1910,8 +1913,9 @@ class Importer {
                 $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
 
             } catch (\Throwable $e) {
+                $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
                 self::generateImporterLog($pnab_reg,
-                    "[{$line}/{$total}] Cenário {$decision['scenario']} ERRO: " . $e->getMessage());
+                    "[{$line}/{$total}] Cenário {$decision['scenario']} ERRO{$context}: " . $e->getMessage());
                 throw $e;
             }
         }
@@ -1919,6 +1923,22 @@ class Importer {
         $plan['pnab_registration'] = self::findEntityById('Registration', $plan['pnab_registration_id']);
 
         return $plan;
+    }
+
+    /**
+     * Monta contexto padronizado para logs por cenário.
+     *
+     * Exemplo: " | reg:123 | org:456 | owner:789 | import:111"
+     */
+    private static function buildScenarioLogContext(array $decision, int $pnab_registration_id): string {
+        $parts = [
+            'reg:' . ((string) ($decision['registration_id'] ?? '-')),
+            'org:' . ((string) ($decision['organization_id'] ?? '-')),
+            'owner:' . ((string) ($decision['owner_id'] ?? '-')),
+            'import:' . $pnab_registration_id,
+        ];
+
+        return ' | ' . implode(' | ', $parts);
     }
 
     // -------------------------------------------------------------------------
