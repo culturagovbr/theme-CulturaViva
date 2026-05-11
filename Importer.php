@@ -8,6 +8,7 @@ use DateTime;
 use MapasCulturais\API;
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
+use MapasCulturais\i;
 use MapasCulturais\Entities\Agent;
 use MapasCulturais\Entities\Registration;
 use MapasCulturais\Entities\RegistrationFile;
@@ -47,6 +48,11 @@ use Respect\Validation\Validator as v;
 class Importer {
 
     public static Registration $registration;
+
+    private const BR_UFS = [
+        'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+        'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+    ];
 
     static $types = [
         'pontao' => [
@@ -104,7 +110,7 @@ class Importer {
             $app->registerJobType(new ImportRegistrationsJob(ImportRegistrationsJob::SLUG));
         }
 
-        // Ao aprovar a inscrição agenda o job de importação das inscrições a partir da planilha enviada na inscrição
+        // Na aprovação da inscrição PNAB, agenda a importação da planilha anexada
         $app->hook("entity(Registration).status(approved)", function() use ($app) {
             /** @var \MapasCulturais\Entities\Registration $this */
 
@@ -114,7 +120,8 @@ class Importer {
 
             if ($file = self::getRegistrationFile($this)) {
                 $params = [
-                    'registration' => $this
+                    // Não enviar a entidade inteira para o Job (evita payload grande e erros ao persistir).
+                    'registration_id' => $this->id
                 ];
 
                 $app->enqueueJob("importRegistrations", $params);
@@ -129,7 +136,8 @@ class Importer {
      * @return Worksheet
      */
     static function getSheet(RegistrationFile $registration_file): Worksheet {
-        $spreadsheet = IOFactory::load($registration_file->path);
+        $path = $registration_file->getPath();
+        $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getActiveSheet();
 
         return $sheet;
@@ -153,6 +161,279 @@ class Importer {
         return $file;
     }
 
+    /**
+     * Valida extensão .xlsx e acesso ao arquivo antes de {@see IOFactory::load} (Cultura Viva / PNAB).
+     *
+     * @return string|null mensagem traduzida de erro, ou null se ok
+     */
+    static function validatePnabSpreadsheetFileForReading(RegistrationFile $file): ?string {
+        $name = (string) $file->name;
+        $ext = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+        if ($ext === '') {
+            $ext = strtolower((string) pathinfo((string) $file->getPath(), PATHINFO_EXTENSION));
+        }
+        if ($ext !== 'xlsx') {
+            return i::__('Envie um arquivo no formato Excel (.xlsx).');
+        }
+        $path = $file->getPath();
+        if (!$path || !is_file($path) || !is_readable($path)) {
+            return i::__('Não foi possível acessar o arquivo enviado. Tente anexar novamente.');
+        }
+        return null;
+    }
+
+    /**
+     * Normaliza texto de célula de cabeçalho PNAB para comparação com o modelo oficial.
+     */
+    static function normalizePnabHeaderCell(string $value): string {
+        $value = trim($value);
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+        return $value;
+    }
+
+    /**
+     * Cabeçalhos esperados na linha 1 (colunas A–M), conforme modelo oficial da planilha PNAB.
+     * A coluna C é validada separadamente (prefixo "Tipo de Certificação" após slugify).
+     *
+     * @return array<string, string> letra da coluna => texto esperado (A, B, D–M)
+     */
+    static function getPnabSpreadsheetCanonicalHeaderCells(): array {
+        return [
+            'A' => '#',
+            'B' => 'Data da Certificação (resultado final da etapa de habilitação)',
+            'D' => 'Estado',
+            'E' => 'Município',
+            'F' => 'Nome da Organização',
+            'G' => 'CNPJ (se houver)',
+            'H' => 'Email da organização',
+            'I' => 'Telefone da organização',
+            'J' => 'Nome do responsável',
+            'K' => 'CPF do responsável',
+            'L' => 'Email do responsável',
+            'M' => 'Telefone do responsável',
+        ];
+    }
+
+    /**
+     * Valida a primeira linha da planilha PNAB (A1:M1): ordem e textos do modelo oficial.
+     * Coluna C: exige prefixo slugificado "Tipo de Certificação" (texto longo do modelo aceito).
+     *
+     * @param array<int|string, mixed> $row1 linha 1 com chaves de coluna A…M (como em {@see Worksheet::rangeToArray})
+     * @return list<string> mensagens de erro traduzidas; vazio se ok
+     */
+    static function validatePnabSpreadsheetHeaderRow(array $row1): array {
+        $app = App::i();
+        $errors = [];
+        $canonical = self::getPnabSpreadsheetCanonicalHeaderCells();
+
+        foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'] as $col) {
+            $raw = isset($row1[$col]) ? (string) $row1[$col] : '';
+            $normalized = self::normalizePnabHeaderCell($raw);
+
+            if ($col === 'C') {
+                if ($normalized === '') {
+                    $errors[] = sprintf(
+                        i::__('Cabeçalho inválido na coluna %s. Utilize o modelo oficial da planilha sem alterar a primeira linha.'),
+                        $col
+                    );
+                    continue;
+                }
+                $slugCell = $app->slugify($normalized);
+                $slugTipo = $app->slugify('Tipo de Certificação');
+                if (!str_starts_with($slugCell, $slugTipo)) {
+                    $errors[] = sprintf(
+                        i::__('Cabeçalho inválido na coluna %s. Utilize o modelo oficial da planilha sem alterar a primeira linha.'),
+                        $col
+                    );
+                }
+                continue;
+            }
+
+            $expected = self::normalizePnabHeaderCell($canonical[$col]);
+            if ($normalized !== $expected) {
+                $errors[] = sprintf(
+                    i::__('Cabeçalho inválido na coluna %s. Utilize o modelo oficial da planilha sem alterar a primeira linha.'),
+                    $col
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Lê A1:M1 e valida cabeçalhos PNAB.
+     *
+     * @return list<string>
+     */
+    static function validatePnabSpreadsheetHeaderFromSheet(Worksheet $sheet): array {
+        $rows = $sheet->rangeToArray('A1:M1', null, true, true, true);
+        if (!isset($rows[1]) || !is_array($rows[1])) {
+            return [i::__('Não foi possível ler a primeira linha da planilha. Utilize o modelo oficial (.xlsx).')];
+        }
+        return self::validatePnabSpreadsheetHeaderRow($rows[1]);
+    }
+
+    /**
+     * Mantém só linhas em que pelo menos uma célula tem conteúdo (após o cabeçalho).
+     *
+     * @param array<int|string, mixed> $data_range retorno de {@see Worksheet::rangeToArray} nas linhas A2:M*
+     * @return array<int|string, array>
+     */
+    static function filterPnabRowsWithAnyCell(array $data_range): array {
+        return array_filter($data_range, static function ($row) {
+            return is_array($row) && (bool) array_filter($row);
+        });
+    }
+
+    /**
+     * Valida o valor da coluna A ("#") em uma linha de dados PNAB: deve ser o inteiro sequencial esperado
+     * (normalmente 1..N após {@see filterPnabRowsWithAnyCell} + {@see array_values}).
+     *
+     * @param mixed $cell_a valor lido da coluna A (inteiro, float “redondo” ou string só com dígitos)
+     * @param int   $expected_one_based valor esperado (ex.: 1, 2, 3…)
+     * @param int   $line número de linha exibido na mensagem (alinhado ao usado em {@see validateRow})
+     * @return string|null mensagem de erro, ou null se ok
+     */
+    static function validatePnabSpreadsheetDataRowIndexCell($cell_a, int $expected_one_based, int $line): ?string {
+        $raw = is_string($cell_a) ? trim($cell_a) : $cell_a;
+
+        $ok = false;
+        if (is_int($raw)) {
+            $ok = ($raw === $expected_one_based);
+        } elseif (is_float($raw)) {
+            $ok = ((int) $raw === $expected_one_based) && ((float) $expected_one_based === (float) $raw);
+        } elseif (is_string($raw) && $raw !== '' && ctype_digit($raw)) {
+            $ok = ((int) $raw === $expected_one_based);
+        }
+
+        if ($ok) {
+            return null;
+        }
+
+        return "Linha: {$line} - Campo '#' inválido. Esperado: {$expected_one_based}.";
+    }
+
+    /**
+     * Validação completa da planilha PNAB no envio da inscrição (hook {@see Theme} / sendValidationErrors).
+     * Não grava dados; só lê o arquivo anexado e devolve mensagens no mesmo formato de {@see $errorsResult}.
+     *
+     * Pré-condição: a inscrição já é da oportunidade PNAB (o hook filtra antes de chamar).
+     *
+     * @return array<string, list<string>> chaves `file_{attachmentId}` ou `error` => lista de mensagens; vazio = ok
+     */
+    public static function validatePnabSpreadsheetForSend(Registration $registration): array {
+        $app = App::i();
+
+        ini_set('max_execution_time', '0');
+        ini_set('memory_limit', '1024M');
+
+        if (!isset($app->config['rcv.pnabOpportunityAttachmentId'])) {
+            return ['error' => ['Erro inesperado, procure o suporte.']];
+        }
+
+        $field_file_id      = 'file_' . $app->config['rcv.pnabOpportunityAttachmentId'];
+        $pnab_attachment_id = 'rfc_' . $app->config['rcv.pnabOpportunityAttachmentId'];
+
+        if (!isset($registration->files[$pnab_attachment_id])) {
+            return [$field_file_id => ['A planilha é obrigatória.']];
+        }
+
+        $pnabFile = $registration->files[$pnab_attachment_id];
+
+        $readError = self::validatePnabSpreadsheetFileForReading($pnabFile);
+        if ($readError !== null) {
+            return [$field_file_id => [$readError]];
+        }
+
+        try {
+            $sheet = self::getSheet($pnabFile);
+        } catch (\Throwable $e) {
+            $app->log->debug('PNAB: falha ao ler planilha: ' . $e->getMessage());
+
+            return [$field_file_id => [i::__('O arquivo não é uma planilha Excel válida ou está corrompido. Utilize o modelo .xlsx e tente novamente.')]];
+        }
+
+        try {
+            $headerErrors = self::validatePnabSpreadsheetHeaderFromSheet($sheet);
+            if ($headerErrors !== []) {
+                return [$field_file_id => $headerErrors];
+            }
+
+            $highestColumn = strtoupper((string) $sheet->getHighestColumn());
+            if ($highestColumn !== 'M') {
+                $extraHeaderCells = $sheet->rangeToArray('N1:XFD1', null, true, true, true)[1] ?? [];
+                $hasExtraHeaderData = (bool) array_filter($extraHeaderCells, static function ($value) {
+                    return trim((string) $value) !== '';
+                });
+
+                if ($hasExtraHeaderData) {
+                    return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+                }
+            }
+
+            $highestRow = (int) $sheet->getHighestRow();
+            if ($highestRow < 2) {
+                return [$field_file_id => [i::__('A planilha deve conter pelo menos uma linha de dados.')]];
+            }
+
+            if ($highestColumn !== 'M') {
+                $extraDataRows = $sheet->rangeToArray("N2:XFD{$highestRow}", null, true, true, true);
+                $hasExtraData = false;
+                foreach ($extraDataRows as $extraRow) {
+                    if ((bool) array_filter($extraRow, static function ($value) {
+                        return trim((string) $value) !== '';
+                    })) {
+                        $hasExtraData = true;
+                        break;
+                    }
+                }
+
+                if ($hasExtraData) {
+                    return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+                }
+            }
+
+            $header     = $sheet->rangeToArray('A1:M1', null, true, true, true)[1];
+            $data_range = $sheet->rangeToArray("A2:M{$highestRow}", null, true, true, true);
+            $data_rows  = array_values(self::filterPnabRowsWithAnyCell($data_range));
+
+            if ($data_rows === []) {
+                return [$field_file_id => [i::__('A planilha deve conter pelo menos uma linha de dados.')]];
+            }
+
+            $validate_rows = [];
+
+            foreach ($data_rows as $index => $row) {
+                if (!array_filter($row)) {
+                    continue;
+                }
+
+                $expected_num = $index + 1;
+
+                $row_index_error = self::validatePnabSpreadsheetDataRowIndexCell($row['A'] ?? null, $expected_num, $expected_num);
+                if ($row_index_error !== null) {
+                    $validate_rows[] = $row_index_error;
+                }
+
+                $parsed_row = self::parseRow($header, $row);
+                $parsed_row = self::normalizeRow($parsed_row);
+
+                if ($row_errors = self::validateRow($parsed_row, $expected_num)) {
+                    $validate_rows = array_merge($validate_rows, $row_errors);
+                }
+            }
+
+            if ($validate_rows !== []) {
+                return [$field_file_id => $validate_rows];
+            }
+        } catch (\Throwable $e) {
+            return [$field_file_id => ['A planilha não foi processada pois não está em conformidade com o modelo disponibilizado. Verifique as regras e tente novamente.']];
+        }
+
+        return [];
+    }
+
     /** 
      * Parseia a linha da planilha de importação de pontos
      * @param array $header
@@ -164,7 +445,7 @@ class Importer {
 
         $column_mapping = (object) self::$column_mapping;
 
-        // mapeia os campos da planilha
+        // Resolve coluna → campo a partir do cabeçalho
         $new_column_mapping = (object) [];
         foreach ($header as $column => $value) {
 
@@ -183,7 +464,7 @@ class Importer {
 
         $column_mapping = $new_column_mapping;
 
-        // parseia os dados da linha
+        // Extrai valores da linha conforme o mapeamento
         $data = (object) [];
         foreach($column_mapping as $key => $column) {
             if ($key == 'ponto_tipo') {
@@ -221,17 +502,83 @@ class Importer {
         return '';
     }
 
-    /** 
+    /**
+     * Normaliza os campos de uma linha já parseada (formata CPF/CNPJ, remove quebras de linha).
+     * Não acessa o banco de dados.
+     *
+     * @param object $row
+     * @return object
+     */
+    public static function normalizeRow(object $row): object {
+        $row->responsavel_cpf  = Utils::formatCnpjCpf(trim($row->responsavel_cpf));
+        $row->organizacao_cnpj = $row->organizacao_cnpj
+            ? Utils::formatCnpjCpf(trim($row->organizacao_cnpj))
+            : null;
+        if ($row->organizacao_cnpj === '') {
+            $row->organizacao_cnpj = null;
+        }
+        $row->organizacao_nome = trim($row->organizacao_nome);
+        $row->organizacao_telefone = self::normalizeBrPhone($row->organizacao_telefone ?? null);
+        $row->responsavel_telefone = self::normalizeBrPhone($row->responsavel_telefone ?? null);
+
+        foreach ($row as $key => $value) {
+            if (is_string($value) && preg_match('/\r\n|\r|\n/', $value)) {
+                $row->$key = preg_replace('/\r\n|\r|\n/', ' ', $value);
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * Normaliza telefone BR (DDD + 8/9 dígitos) para o formato canônico:
+     * - (DD) NNNN-NNNN  (10 dígitos)
+     * - (DD) NNNNN-NNNN (11 dígitos)
+     *
+     * Se não for possível normalizar (tamanho diferente de 10/11 após remover não-dígitos),
+     * devolve o valor original (trimado) para a validação acusar erro.
+     */
+    private static function normalizeBrPhone($value): ?string {
+        if ($value === null) {
+            return null;
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+
+        if (strlen($digits) === 10) {
+            $ddd = substr($digits, 0, 2);
+            $p1  = substr($digits, 2, 4);
+            $p2  = substr($digits, 6, 4);
+            return "({$ddd}) {$p1}-{$p2}";
+        }
+
+        if (strlen($digits) === 11) {
+            $ddd = substr($digits, 0, 2);
+            $p1  = substr($digits, 2, 5);
+            $p2  = substr($digits, 7, 4);
+            return "({$ddd}) {$p1}-{$p2}";
+        }
+
+        return $raw;
+    }
+
+    /**
      * Encontra a inscrição do ponto na plataforma
      * @param object $row
      * @return Registration|null
+     * @deprecated Usar findRegistrationByRowReadOnly() na Fase A
      */
     static function findRegistrationByRow(object $row): ?Registration {
         $app = App::i();
         $opportunity_id = $app->config['rcv.opportunityId'];
 
         if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
-            // para ponto coletivo, busca por responsavel_cpf e itera sobre os resultados buscando pelo nome do ponto
+            // Ponto coletivo: busca por CPF e filtra pelo nome do coletivo
             $query = new ApiQuery(Registration::class, [
                 'opportunity' => API::EQ($opportunity_id), 
                 'category' => API::EQ($row->ponto_tipo), 
@@ -256,7 +603,7 @@ class Importer {
                 }
             }
         } else {
-            // para ponto entidade e pontão, busca por cnpj e itera sobre os resultados verificando o cpf do responsável
+            // Ponto entidade/pontão: busca por CNPJ e confere o CPF do responsável
             $query = new ApiQuery(Registration::class, [
                 'opportunity' => API::EQ($opportunity_id), 
                 'category' => API::EQ($row->ponto_tipo), 
@@ -309,6 +656,7 @@ class Importer {
      * Encontra a organização do ponto na plataforma
      * @param object $row
      * @return Agent|null
+     * @deprecated Usar findOrganizationByRowReadOnly() na Fase A
      */
     static function findOrganizationByRow(object $row): ?Agent {
         $app = App::i();
@@ -363,7 +711,7 @@ class Importer {
         /** @var Agent */
         $agent = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
 
-        // Verifica se o tipo de ponto na planilha é diferente de ponto coletivo e caso a organização não tenha cnpj, insere
+        // Se não for coletivo e estiver sem CNPJ cadastrado, completa a partir da planilha
         if($agent && !$agent->cnpj && $row->ponto_tipo != $app->config['rcv.categoriesMap']['ponto-coletivo']) {
             $agent->cnpj = $row->organizacao_cnpj;
             $agent->save();
@@ -377,6 +725,7 @@ class Importer {
      *
      * @param object $row
      * @return Agent|null
+     * @deprecated Usar findOrganizationFromOtherAgentReadOnly() na Fase A
      */
     static function findOrganizationFromOtherAgent(object $row): ?Agent {
         $app = App::i();
@@ -438,10 +787,22 @@ class Importer {
         return null;
     }
 
+    /**
+     * Versão read-only de findOrganizationFromOtherAgent.
+     * Idêntica ao original — já não fazia writes.
+     *
+     * @param object $row
+     * @return Agent|null
+     */
+    public static function findOrganizationFromOtherAgentReadOnly(object $row): ?Agent {
+        return self::findOrganizationFromOtherAgent($row);
+    }
+
     /** 
      * Encontra o responsável do ponto na plataforma
      * @param object $row
      * @return Agent|null
+     * @deprecated Usar findOrganizationOwnerByRowReadOnly() na Fase A
      */
     static function findOrganizationOwnerByRow(object $row): ?Agent {
         $app = App::i();
@@ -473,6 +834,372 @@ class Importer {
         $agent = $app->repo('Agent')->findOneBy(['id' => $valid_owner_ids], ['updateTimestamp' => 'DESC']);
 
         return $agent;
+    }
+
+    // -------------------------------------------------------------------------
+    // Fase A: buscas read-only e montagem do plano de execução
+    // -------------------------------------------------------------------------
+
+    private static function entityId($entity): ?int {
+        return $entity ? (int) $entity->id : null;
+    }
+
+    private static function entityIds(array $entities): array {
+        return array_values(array_filter(array_map(
+            fn($entity) => self::entityId($entity),
+            $entities
+        )));
+    }
+
+    private static function findEntityById(string $repository, ?int $id) {
+        if (!$id) {
+            return null;
+        }
+
+        return App::i()->repo($repository)->find($id);
+    }
+
+    /**
+     * Busca uma inscrição existente compatível com a linha, sem executar writes.
+     *
+     * @param object $row linha normalizada
+     * @return array{registration: Registration, organization: Agent, deferred: array}|null
+     */
+    public static function findRegistrationByRowReadOnly(object $row): ?array {
+        $app = App::i();
+        $opportunity_id = $app->config['rcv.opportunityId'];
+
+        if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
+            $query = new ApiQuery(Registration::class, [
+                'opportunity' => API::EQ($opportunity_id),
+                'category'    => API::EQ($row->ponto_tipo),
+                'status'      => API::GTE(0),
+                '@keyword'    => "$row->responsavel_cpf"
+            ]);
+
+            $ids = $query->findIds();
+            $registrations = $app->repo('Registration')->findBy(['id' => $ids]);
+
+            foreach ($registrations as $registration) {
+                $coletivo        = $registration->getRelatedAgents('coletivo');
+                $name            = $coletivo[0]->name ?? null;
+                $coletivo_status = $coletivo[0]->status ?? null;
+
+                if (!empty($coletivo) && $coletivo_status >= 0 && !empty($name) && !empty($row->organizacao_nome)) {
+                    if ($app->slugify($name) == $app->slugify($row->organizacao_nome)) {
+                        return [
+                            'registration' => $registration,
+                            'organization' => $coletivo[0],
+                            'deferred'     => ['new_owner_for_user' => null],
+                        ];
+                    }
+                }
+            }
+        } else {
+            $query = new ApiQuery(Registration::class, [
+                'opportunity' => API::EQ($opportunity_id),
+                'category'    => API::EQ($row->ponto_tipo),
+                'status'      => API::GTE(0),
+                '@keyword'    => "$row->organizacao_cnpj"
+            ]);
+
+            $ids = $query->findIds();
+            $registrations = $app->repo('Registration')->findBy(['id' => $ids]);
+
+            foreach ($registrations as $registration) {
+                $coletivo        = $registration->getRelatedAgents('coletivo');
+                $coletivo_status = $coletivo ? $coletivo[0]->status : null;
+
+                if ($registration->owner->status < 0) {
+                    $user = $registration->owner->user;
+
+                    if ($user && $user->status <= 0) {
+                        continue;
+                    }
+
+                    // No fluxo antigo, o owner era trocado por um Agent sem CPF antes do match.
+                    // Para manter o mesmo resultado no modo read-only, esta inscrição não entra
+                    // como candidata.
+                    continue;
+                }
+
+                if ($coletivo && $coletivo_status >= 0
+                    && $app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome)
+                    && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)
+                ) {
+                    return [
+                        'registration' => $registration,
+                        'organization' => $coletivo[0],
+                        'deferred'     => ['new_owner_for_user' => null],
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Busca uma organização compatível com a linha, sem executar writes.
+     * Ajustes necessários (ex.: completar CNPJ) são devolvidos em 'deferred'.
+     *
+     * @param object $row linha normalizada
+     * @return array{organization: Agent, owner: Agent|null, deferred: array}|null
+     */
+    public static function findOrganizationByRowReadOnly(object $row, array $cleared_agent_ids = []): ?array {
+        $app = App::i();
+
+        $cpf_query = new ApiQuery(Agent::class, [
+            'cpf'  => API::OR(API::EQ($row->responsavel_cpf), API::EQ(preg_replace('/[-\.]/', '', $row->responsavel_cpf))),
+            'type' => API::EQ(1)
+        ]);
+
+        $owner_ids       = $cpf_query->findIds();
+        $valid_owner_ids = [];
+        $clear_cpf_agents = [];
+
+        foreach ($owner_ids as $owner_id) {
+            if (isset($cleared_agent_ids[$owner_id])) {
+                continue;
+            }
+
+            $owner = $app->repo('Agent')->find($owner_id);
+
+            if ($owner && $owner->status < 0) {
+                $clear_cpf_agents[] = $owner;
+                continue;
+            }
+
+            $valid_owner_ids[] = $owner_id;
+        }
+
+        if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
+            $query = new ApiQuery(Agent::class, [
+                'name'   => API::ILIKE($row->organizacao_nome),
+                'parent' => API::IN($valid_owner_ids),
+                'type'   => API::EQ(2),
+                'status' => API::GTE(0)
+            ]);
+            $ids = $query->findIds();
+        } else {
+            $query1 = new ApiQuery(Agent::class, [
+                'cnpj'   => API::OR(API::EQ($row->organizacao_cnpj), API::EQ(preg_replace('/[-\.\/]/', '', $row->organizacao_cnpj))),
+                'parent' => API::IN($valid_owner_ids),
+                'type'   => API::EQ(2),
+                'status' => API::GTE(0)
+            ]);
+            $query2 = new ApiQuery(Agent::class, [
+                'name'   => API::ILIKE($row->organizacao_nome),
+                'parent' => API::IN($valid_owner_ids),
+                'type'   => API::EQ(2),
+                'status' => API::GTE(0)
+            ]);
+            $ids = array_merge($query1->findIds(), $query2->findIds());
+        }
+
+        /** @var Agent|null */
+        $agent = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
+
+        if (!$agent) {
+            return null;
+        }
+
+        // CNPJ ausente: registra para completar na Fase B
+        $set_org_cnpj = null;
+        if (!$agent->cnpj && $row->ponto_tipo != $app->config['rcv.categoriesMap']['ponto-coletivo']) {
+            $set_org_cnpj = $row->organizacao_cnpj;
+        }
+
+        $owner = $agent->parent;
+
+        return [
+            'organization' => $agent,
+            'owner'        => $owner,
+            'deferred'     => [
+                'clear_cpf_agents' => $clear_cpf_agents,
+                'set_org_cnpj'     => $set_org_cnpj,
+            ],
+        ];
+    }
+
+    /**
+     * Busca o responsável (owner) compatível com a linha, sem executar writes.
+     * Ajustes necessários são devolvidos em 'deferred'.
+     *
+     * @param object $row linha normalizada
+     * @return array{owner: Agent, deferred: array}|null
+     */
+    public static function findOrganizationOwnerByRowReadOnly(object $row, array $cleared_agent_ids = []): ?array {
+        $app = App::i();
+
+        $query = new ApiQuery(Agent::class, [
+            'cpf'  => API::OR(API::EQ($row->responsavel_cpf), API::EQ(preg_replace('/[-\.]/', '', $row->responsavel_cpf))),
+            'type' => API::EQ(1)
+        ]);
+
+        $ids             = $query->findIds();
+        $valid_owner_ids = [];
+        $clear_cpf_agents = [];
+
+        foreach ($ids as $id) {
+            if (isset($cleared_agent_ids[$id])) {
+                continue;
+            }
+
+            $owner = $app->repo('Agent')->find($id);
+
+            if ($owner && $owner->status < 0) {
+                $clear_cpf_agents[] = $owner;
+                continue;
+            }
+
+            $valid_owner_ids[] = $id;
+        }
+
+        /** @var Agent|null */
+        $agent = $app->repo('Agent')->findOneBy(['id' => $valid_owner_ids], ['updateTimestamp' => 'DESC']);
+
+        if (!$agent) {
+            return null;
+        }
+
+        return [
+            'owner'    => $agent,
+            'deferred' => ['clear_cpf_agents' => $clear_cpf_agents],
+        ];
+    }
+
+    /**
+     * Resolve a decisão da linha (cenário, entidades encontradas e writes diferidos),
+     * sem executar alterações no banco.
+     *
+     * @param object $row  linha já parseada e normalizada
+     * @param int    $line número da linha na planilha (para logging)
+     * @return array RowDecision
+     */
+    public static function resolveRowScenario(object $row, int $line, array $cleared_agent_ids = []): array {
+        $decision = [
+            'line'            => $line,
+            'row'             => $row,
+            'scenario'        => null,
+            'registration_id' => null,
+            'organization_id' => null,
+            'owner_id'        => null,
+            'deferred'        => [
+                'clear_cpf_agent_ids' => [],
+                'set_org_cnpj'        => null,
+            ],
+            'email' => [
+                'to'                  => $row->responsavel_email,
+                'user_name'           => $row->responsavel_nome,
+                'organization_name'   => $row->organizacao_nome,
+                'organization_cnpj'   => $row->organizacao_cnpj,
+                'registration_id'     => null,
+                'registration_number' => null,
+                'category'            => $row->ponto_tipo,
+            ],
+        ];
+
+        // Cenário 5: CPF conflitante (organização vinculada a outro responsável)
+        if ($org = self::findOrganizationFromOtherAgentReadOnly($row)) {
+            $decision['scenario']        = 5;
+            $decision['organization_id'] = self::entityId($org);
+            $decision['email']['organization_name'] = $org->name;
+            $decision['email']['organization_cnpj'] = $org->cnpj;
+            return $decision;
+        }
+
+        // Cenário 1: inscrição já existe no cadastro
+        if ($result = self::findRegistrationByRowReadOnly($row)) {
+            $decision['scenario']        = 1;
+            $decision['registration_id'] = self::entityId($result['registration']);
+            $decision['organization_id'] = self::entityId($result['organization']);
+            $decision['owner_id']        = self::entityId($result['registration']->owner ?? null);
+            $decision['email']['registration_id']     = $result['registration']->id;
+            $decision['email']['registration_number'] = $result['registration']->number;
+            $decision['email']['user_name']           = $result['registration']->owner->name;
+            $decision['email']['organization_name']   = $result['organization']->name;
+            $decision['email']['organization_cnpj']   = $result['organization']->cnpj;
+            return $decision;
+        }
+
+        // Cenário 2: organização existe, mas a inscrição ainda não
+        if ($result = self::findOrganizationByRowReadOnly($row, $cleared_agent_ids)) {
+            $decision['scenario']        = 2;
+            $decision['organization_id'] = self::entityId($result['organization']);
+            $decision['owner_id']        = self::entityId($result['owner']);
+            $decision['email']['user_name']           = $result['organization']->parent->name;
+            $decision['email']['organization_name']   = $result['organization']->name;
+            $decision['email']['organization_cnpj']   = $result['organization']->cnpj;
+
+            $decision['deferred']['clear_cpf_agent_ids'] = self::entityIds($result['deferred']['clear_cpf_agents']);
+            $decision['deferred']['set_org_cnpj']        = $result['deferred']['set_org_cnpj'];
+            return $decision;
+        }
+
+        // Cenário 3.1: owner existe, mas não há organização nem inscrição
+        if ($result = self::findOrganizationOwnerByRowReadOnly($row, $cleared_agent_ids)) {
+            $decision['scenario'] = 3.1;
+            $decision['owner_id'] = self::entityId($result['owner']);
+            $decision['email']['user_name'] = $result['owner']->name;
+            $decision['deferred']['clear_cpf_agent_ids'] = self::entityIds($result['deferred']['clear_cpf_agents']);
+            return $decision;
+        }
+
+        // Cenário 4: nada encontrado, criar tudo
+        $decision['scenario'] = 4;
+        return $decision;
+    }
+
+    /**
+     * Lê a planilha e monta o plano de execução (ExecutionPlan).
+     * Esta etapa não abre transação e não executa writes.
+     *
+     * @param Registration $pnab_registration inscrição PNAB que contém a planilha
+     * @return array ExecutionPlan
+     * @throws \Exception se o arquivo não for encontrado
+     */
+    public static function buildExecutionPlan(Registration $pnab_registration): array {
+        $app = App::i();
+        $app->log->info("Fase A: construindo plano de execução para inscrição {$pnab_registration->id}");
+
+        $file = self::getRegistrationFile($pnab_registration);
+        if (!$file) {
+            throw new \Exception("Nenhum arquivo encontrado para a inscrição {$pnab_registration->id}.");
+        }
+
+        $sheet      = self::getSheet($file);
+        $header     = $sheet->rangeToArray("A1:" . $sheet->getHighestColumn() . "1", null, true, true, true)[1];
+        $data_range = $sheet->rangeToArray("A2:" . $sheet->getHighestColumn() . $sheet->getHighestRow(), null, true, true, true);
+        $data_range = self::filterPnabRowsWithAnyCell($data_range);
+        $data_range = array_values($data_range);
+
+        $plan = [
+            'pnab_registration'    => $pnab_registration,
+            'pnab_registration_id' => $pnab_registration->id,
+            'total_rows'           => count($data_range),
+            'rows'                 => [],
+        ];
+
+        $cleared_agent_ids = [];
+
+        foreach ($data_range as $index => $raw_row) {
+            $line     = $index + 1;
+            $row      = self::parseRow($header, $raw_row);
+            $row      = self::normalizeRow($row);
+            $decision = self::resolveRowScenario($row, $line, $cleared_agent_ids);
+
+            foreach ($decision['deferred']['clear_cpf_agent_ids'] as $agent_id) {
+                $cleared_agent_ids[$agent_id] = true;
+            }
+
+            $plan['rows'][] = $decision;
+
+            $app->log->debug("Fase A: linha {$line} → cenário {$decision['scenario']}");
+        }
+
+        $app->log->info("Fase A: {$plan['total_rows']} linhas resolvidas.");
+        return $plan;
     }
 
     /** 
@@ -538,7 +1265,7 @@ class Importer {
      * @return Agent
      */
     static function createOrganizationOwner(object $row): Agent {
-        // cria o usuário
+        // Usuário vinculado ao responsável (authUid por e-mail)
         $user = new User();
         $user->email = $row->responsavel_email;
         $user->authProvider = "0";
@@ -547,7 +1274,7 @@ class Importer {
 
         $owner = new Agent();
         $owner->user = $user;
-        $owner->type = 1; // @todo: verificar salvamento correto do type
+        $owner->type = 1; // @todo: confirmar persistência do campo type
         $owner->name = $row->responsavel_nome;
         $owner->cpf = $row->responsavel_cpf;
         $owner->emailPrivado = $row->responsavel_email;
@@ -570,6 +1297,7 @@ class Importer {
      *   owner: Owner|null,
      *   scenario: int|float
      * }
+     * @deprecated Substituído por resolveRowScenario() (Fase A) + applyScenario() (Fase B)
      */
     public static function processRow(object $row, Registration $pnab_registration) {
         $app = App::i();
@@ -658,12 +1386,12 @@ class Importer {
                     }
                 }
     
-                // Se já não tiver o selo, adiciona o selo de certificação via edital
+                // Selo de certificação (via edital)
                 if(!$has_seal) {
                     $organization->createSealRelation($seal, agent: $organization);
                 }
 
-                // Se já não tiver o selo, adiciona o selo de aguardando atualização
+                // Selo de aguardando atualização (quando a inscrição foi criada/atualizada pela importação)
                 if($scenario != 1 && !$has_waiting_update_seal) {
                     $organization->createSealRelation($waiting_update_seal, agent: $organization);
                 }
@@ -675,7 +1403,7 @@ class Importer {
 
             $registration->setStatusToApproved(false);
 
-            // Caso a inscrição for criada pela importação, altera a data de certificação com a data da planilha
+            // Para inscrições criadas pela importação, usa a data da planilha na relação de verificação
             if($scenario != 1) {
                 $relations = $organization->getSealRelations();
                 $seals_ids = [
@@ -691,7 +1419,7 @@ class Importer {
                 }
             }
 
-            // Salva dados da importação na inscrição criada/manipulada
+            // Guarda contexto da importação na inscrição
             $registration->rcv_importer_row = [
                 'data' => (array) $row,
                 'scenario' => $scenario
@@ -718,11 +1446,6 @@ class Importer {
             $cnpj_required = false;
 
             if ($key == 'ponto_tipo') {
-                if (empty($field_value)) {
-                    $errors[] = "Linha: {$line} - Campo '{$label}' obrigatório.";
-                    continue;
-                }
-
                 $parsed_category = self::parseCategory($field_value);
 
                 if (empty($parsed_category)) {
@@ -730,27 +1453,36 @@ class Importer {
                     continue;
                 }
 
-                $category = '';
-                foreach (self::$types as $key => $types) {
-                    if (in_array($parsed_category, $types)) {
-                        $category = $key;
-                        break;
-                    }
+                if (empty($field_value)) {
+                    $errors[] = "Linha: {$line} - Campo '{$label}' obrigatório.";
+                    continue;
                 }
 
-                if ($category !== 'ponto-coletivo') {
-                    // CNPJ
-                    $cnpj_required = true;
+                // A chave da categoria vem do categoriesMap (fonte de verdade para rótulos/códigos)
+                $app = App::i();
+                $category = array_search($parsed_category, (array) $app->config['rcv.categoriesMap'], true);
+                if ($category === false) {
+                    $category = '';
+                }
 
-                    if (empty($row->organizacao_cnpj)) {
-                        $errors[] = "Linha: {$line} - Campo 'CNPJ' obrigatório para a categoria {$category}.";
-                    } elseif (!v::cnpj()->validate($row->organizacao_cnpj)) {
-                        $errors[] = "Linha: {$line} - CNPJ ({$row->organizacao_cnpj}) inválido.";
+                // Coletivo é definido pelo valor canônico do mapa
+                $coletivo_canon     = (string) ($app->config['rcv.categoriesMap']['ponto-coletivo'] ?? '');
+                $is_ponto_coletivo = ((string) $parsed_category === $coletivo_canon);
+
+                $raw_cnpj = trim((string) ($row->organizacao_cnpj ?? ''));
+                if ($is_ponto_coletivo) {
+                    if ($raw_cnpj !== '') {
+                        $errors[] = "Linha: {$line} - Campo 'CNPJ' deve ficar vazio para a categoria {$category}.";
                     }
-                    // elseif ($check_cnpj = Importer::checkCNPJ($row->organizacao_cnpj)) {
-                    //     $message_error = "CNPJ ({$row->organizacao_cnpj}) inválido. {$check_cnpj['message']}";
-                    //     $errors[] = "Linha: {$line} - {$message_error}";
-                    // }
+                } else {
+                    $cnpj_required = true;
+                    $formatted_cnpj = $raw_cnpj !== '' ? Utils::formatCnpjCpf($raw_cnpj) : '';
+
+                    if ($formatted_cnpj === '') {
+                        $errors[] = "Linha: {$line} - Campo 'CNPJ' obrigatório para a categoria {$category}.";
+                    } elseif (!v::cnpj()->validate($formatted_cnpj)) {
+                        $errors[] = "Linha: {$line} - CNPJ ({$raw_cnpj}) inválido.";
+                    }
                 }
 
             } elseif ($key == 'responsavel_cpf') {
@@ -760,17 +1492,21 @@ class Importer {
                     $errors[] = "Linha: {$line} - Campo 'CPF' inválido.";
                 }
             } elseif (in_array($key, ['organizacao_cnpj', 'ponto_tipo'])) {
-                continue; // Pula os campos validados anteriormente
+                continue; // Já validado acima
             } elseif ($key == 'responsavel_email') {
                 if (empty($row->responsavel_email)) {
                     $errors[] = "Linha: {$line} - Campo 'Email do responsável' obrigatório.";
+                } elseif (preg_match('/[A-Z]/', $field_value)) {
+                    $errors[] = "Linha: {$line} - Campo 'Email do responsável' inválido. Não use letras maiúsculas.";
                 } elseif (!v::email()->validate($field_value)) {
                     $errors[] = "Linha: {$line} - Campo 'Email do responsável' inválido.";
                 }
             } elseif ($key == 'organizacao_email') {
-                if ($cnpj_required && empty($row->organizacao_email)) {
-                    $errors[] = "Linha: {$line} - Campo 'CNPJ' obrigatório.";
-                } elseif(!empty(!v::email()->validate($field_value))) {
+                if (empty($row->organizacao_email)) {
+                    $errors[] = "Linha: {$line} - Campo 'Email da organização' obrigatório.";
+                } elseif (preg_match('/[A-Z]/', $field_value)) {
+                    $errors[] = "Linha: {$line} - Campo 'Email da organização' inválido. Não use letras maiúsculas.";
+                } elseif (!v::email()->validate($field_value)) {
                     $errors[] = "Linha: {$line} - Campo 'Email da organização' inválido.";
                 }
             } elseif($key == 'ponto_data') {
@@ -800,17 +1536,22 @@ class Importer {
                     $errors[] = "Linha: {$line} - Campo 'Nome do responsável' obrigatório.";
                 }
             } elseif($key == 'ponto_uf') {
-                if(empty($row->ponto_uf)) {
+                $uf = $field_value;
+
+                if ($uf === '') {
                     $errors[] = "Linha: {$line} - Campo 'Estado' obrigatório.";
-                } elseif(strlen($row->ponto_uf) != 2 ) {
-                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Deve conter a sigla do estado.";
+                } elseif (strlen($uf) !== 2) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Deve conter a sigla do estado (2 letras).";
+                } elseif ($uf !== strtoupper($uf)) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Use a sigla em caixa alta (ex.: SP).";
+                } elseif (!in_array($uf, self::BR_UFS, true)) {
+                    $errors[] = "Linha: {$line} - Campo 'Estado' inválido. Informe uma UF brasileira válida (ex.: SP, RJ, DF).";
                 }
             } elseif($key == 'ponto_municipio') {
                 if(empty($row->ponto_municipio)) {
                     $errors[] = "Linha: {$line} - Campo 'Município' obrigatório.";
                 }
             } else {
-                // Valida se os demais campos estão preenchidos
                 if (empty($field_value)) {
                     $errors[] = "Linha: {$line} - Campo '{$label}' obrigatório.";
                 }
@@ -820,6 +1561,10 @@ class Importer {
         return array_filter($errors);
     }
 
+    /**
+     * @deprecated Substituído por buildExecutionPlan() + applyExecutionPlan() + sendEmails()
+     *             com orquestração em ImportRegistrationsJob::_execute()
+     */
     public static function runImportRegistrationsJob(Registration $registration) {
         $app = App::i();
         $app->log->info("Iniciando importação da planilha da inscrição {$registration->id}");
@@ -921,156 +1666,420 @@ class Importer {
         return $result;
     }
 
+    // -------------------------------------------------------------------------
+    // Fase B: aplicação do plano dentro da transação
+    // -------------------------------------------------------------------------
+
     /**
-     * Envia e-mails de notificação para os responsáveis pelas inscrições importadas.
+     * Executa os writes que foram adiados na Fase A (campo 'deferred' do RowDecision).
+     * Deve rodar antes da aplicação do cenário.
      *
-     * @param array $data
+     * @param array $decision RowDecision (por referência)
      * @return void
      */
-    public static function sendEmails(array $data) {
+    private static function applyDeferredWrites(array &$decision): void {
         $app = App::i();
 
-        // Envia e-mail para cada caso/linha da planilha
-        foreach ($data['data_rows'] as $row) {
-
-            if ($row['scenario'] == 1) {
-
-                $registration = $app->repo('registration')->findOneBy(['id' => $row['registration_id']]);
-                $organization = $app->repo('Agent')->findOneBy(['parent' => $registration->owner->id]);
-
-                $template_data = [
-                    'siteName'           => $app->siteName,
-                    'userName'           => $registration->owner->name,
-                    'registrationNumber' => $registration->number,
-                    'redirectUrl'        => $app->createUrl('registration', 'single', [$registration->id]),
-                    'organizationName'   => $organization->name,
-                    'organizationCNPJ'   => $organization->cnpj,
-                    'type'               => $row['category']
-                ];
-
-                $message = $app->renderMustacheTemplate('primeiro_caso.html', $template_data);
-                $subject = "[Cultura Viva] Sua organização {$organization->name} foi certificada por um Edital de Seleção da Cultura Viva.";
-
-            } else if ($row['scenario'] == 2) {
-
-                $registration = $app->repo('registration')->findOneBy(['id' => $row['registration_id']]);
-
-                $template_data = [
-                    'siteName'         => $app->siteName,
-                    'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
-                    'organizationName' => $row['organization']->name,
-                    'organizationCNPJ' => $row['organization']->cnpj,
-                    'type'             => $row['category']
-                ];
-
-                $message = $app->renderMustacheTemplate('segundo_caso.html', $template_data);
-                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
-
-            } else if ($row['scenario'] == 3.1) {
-
-                $registration = $app->repo('registration')->findOneBy(['id' => $row['registration_id']]);
-
-                $template_data = [
-                    'siteName'         => $app->siteName,
-                    'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
-                    'organizationName' => $row['organization']->name,
-                    'organizationCNPJ' => $row['organization']->cnpj,
-                    'type'             => $row['category']
-                ];
-
-                $message = $app->renderMustacheTemplate('terceiro_caso.html', $template_data);
-                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
-
-            } else if ($row['scenario'] == 4) {
-
-                $registration = $app->repo('registration')->findOneBy(['id' => $row['registration_id']]);
-
-                $template_data = [
-                    'siteName'         => $app->siteName,
-                    'userName'         => $registration->owner->name,
-                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
-                    'organizationName' => $row['organization']->name,
-                    'organizationCNPJ' => $row['organization']->cnpj,
-                    'type'             => $row['category']
-                ];
-
-                $message = $app->renderMustacheTemplate('quarto_caso.html', $template_data);
-                $subject = "[Cultura Viva] Sua organização {$row['organization']->name} foi certificada por um Edital de Seleção da Cultura Viva.";
-
-            } else if ($row['scenario'] == 5) {
-
-                $organization = $row['organization'];
-
-                $template_data = [
-                    'siteName'         => $app->siteName,
-                    'userName'         => $row['userName'],
-                    'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
-                    'organizationName' => $organization->name,
-                    'organizationCNPJ' => $organization->cnpj,
-                    'type'             => $row['category']
-                ];
-
-                $message = $app->renderMustacheTemplate('quinto_caso.html', $template_data);
-                $subject = "[Cultura Viva] Sua organização {$organization->name} foi certificada por um Edital de Seleção da Cultura Viva.";
-            } else {
-                continue;
+        // Limpa CPF de agentes desativados identificados na Fase A
+        foreach ($decision['deferred']['clear_cpf_agent_ids'] as $agent_id) {
+            $agent = self::findEntityById('Agent', $agent_id);
+            if (!$agent) {
+                throw new \Exception("Agente {$agent_id} não encontrado para limpeza de CPF durante a importação.");
             }
 
-            $to = $row['email'] ?? '';
+            $app->disableAccessControl();
+            $agent->cpf = null;
+            $agent->save();
+            $app->enableAccessControl();
+        }
+
+        // Completa CNPJ na organização quando estava ausente (cenário 2)
+        if ($decision['deferred']['set_org_cnpj'] && !$decision['organization_id']) {
+            throw new \Exception('Organização ausente para atualização de CNPJ durante a importação.');
+        }
+
+        if ($decision['deferred']['set_org_cnpj']) {
+            $organization = self::findEntityById('Agent', $decision['organization_id']);
+            if (!$organization) {
+                throw new \Exception("Organização {$decision['organization_id']} não encontrada para atualização de CNPJ durante a importação.");
+            }
+
+            $app->disableAccessControl();
+            $organization->cnpj = $decision['deferred']['set_org_cnpj'];
+            $organization->save();
+            $app->enableAccessControl();
+        }
+    }
+
+    /**
+     * Aplica a decisão da linha: cria entidades quando necessário, aplica selos e aprova inscrição.
+     * Esta função parte do RowDecision; não executa novas buscas.
+     *
+     * @param array         $decision      RowDecision (por referência, para preencher dados de email quando necessário)
+     * @param \MapasCulturais\Entities\Seal $importer_seal
+     * @param \MapasCulturais\Entities\Seal $waiting_seal
+     * @param Registration  $pnab_reg      inscrição PNAB original
+     * @return void
+     */
+    private static function applyScenario(
+        array &$decision,
+        $importer_seal,
+        $waiting_seal,
+        Registration $pnab_reg
+    ): void {
+        $app      = App::i();
+        $row      = $decision['row'];
+        $scenario = $decision['scenario'];
+        $registration = self::findEntityById('Registration', $decision['registration_id'] ?? null);
+        $organization = self::findEntityById('Agent', $decision['organization_id'] ?? null);
+        $owner = self::findEntityById('Agent', $decision['owner_id'] ?? null);
+
+        // Cenário 5 não altera dados; apenas notificação
+        if ($scenario == 5) {
+            return;
+        }
+
+        if ($scenario == 1 && (!$registration || !$organization)) {
+            throw new \Exception('Inscrição ou organização do cenário 1 não encontrada durante a importação.');
+        }
+
+        if ($scenario == 2 && !$organization) {
+            throw new \Exception('Organização do cenário 2 não encontrada durante a importação.');
+        }
+
+        if ($scenario == 3.1 && !$owner) {
+            throw new \Exception('Responsável do cenário 3.1 não encontrado durante a importação.');
+        }
+
+        // Cenário 2: organização existe, criar inscrição
+        if ($scenario == 2) {
+            $registration = self::createRegistration($row, $organization);
+            $decision['registration_id'] = $registration->id;
+            $decision['email']['registration_id']     = $registration->id;
+            $decision['email']['registration_number'] = $registration->number;
+        }
+
+        // Cenário 3.1: owner existe, criar organização e inscrição
+        if ($scenario == 3.1) {
+            $organization = self::createOrganization($row, $owner);
+            $registration = self::createRegistration($row, $organization);
+            $organization->rcv_registration = $registration;
+            $organization->save();
+            $decision['organization_id'] = $organization->id;
+            $decision['registration_id'] = $registration->id;
+            $decision['email']['registration_id']     = $registration->id;
+            $decision['email']['registration_number'] = $registration->number;
+        }
+
+        // Cenário 4: criar tudo
+        if ($scenario == 4) {
+            $owner        = self::createOrganizationOwner($row);
+            $organization = self::createOrganization($row, $owner);
+            $registration = self::createRegistration($row, $organization);
+            $organization->rcv_registration = $registration;
+            $organization->save();
+            $decision['owner_id']        = $owner->id;
+            $decision['organization_id'] = $organization->id;
+            $decision['registration_id'] = $registration->id;
+            $decision['email']['user_name']           = $owner->name;
+            $decision['email']['registration_id']     = $registration->id;
+            $decision['email']['registration_number'] = $registration->number;
+        }
+
+        // Selos e aprovação: cenários 1, 2, 3.1, 4
+
+        // No cenário 1, recarrega a organização a partir da relação da inscrição
+        if ($scenario == 1) {
+            $organization = $app->repo('Agent')->find($registration->relatedAgents['coletivo'][0]->id);
+        }
+
+        // tipoPonto: atualiza somente quando a organização já existia antes desta importação
+        if (!in_array($scenario, [3.1, 4])) {
+            $type_selected            = self::getTypeDict($row->ponto_tipo);
+            $organization->tipoPonto  = self::ensureTypeInArray($type_selected, $organization->tipoPonto);
+            $organization->save();
+        }
+
+        // Aplica selos somente quando existirem na base (mantém o guard do fluxo antigo)
+        if ($importer_seal) {
+            $has_seal = false;
+            foreach ($organization->getSealRelations() as $sr) {
+                if ($sr->seal->id == $importer_seal->id) { $has_seal = true; break; }
+            }
+            if (!$has_seal) {
+                $organization->createSealRelation($importer_seal, agent: $organization);
+            }
+        }
+        if ($waiting_seal) {
+            $has_waiting_seal = false;
+            foreach ($organization->getSealRelations() as $sr) {
+                if ($sr->seal->id == $waiting_seal->id) { $has_waiting_seal = true; break; }
+            }
+            if ($scenario != 1 && !$has_waiting_seal) {
+                $organization->createSealRelation($waiting_seal, agent: $organization);
+            }
+        }
+
+        // sentTimestamp e status da inscrição
+        if (!$registration->sentTimestamp) {
+            $registration->sentTimestamp = new \DateTime;
+        }
+        $registration->setStatusToApproved(false);
+
+        // Atualiza o timestamp das relações de verificação (cenários != 1)
+        if ($scenario != 1) {
+            $verification_ids = [
+                $app->config['rcv.verificationSeals']['ponto'],
+                $app->config['rcv.verificationSeals']['pontao'],
+            ];
+            foreach ($organization->getSealRelations() as $sr) {
+                if (in_array($sr->seal->id, $verification_ids)) {
+                    $sr->createTimestamp = \DateTime::createFromFormat(
+                        Utils::detectDateFormat($row->ponto_data),
+                        $row->ponto_data
+                    );
+                    $sr->save();
+                }
+            }
+        }
+
+        // Metadados da inscrição
+        $registration->rcv_importer_row = [
+            'data'     => (array) $row,
+            'scenario' => $scenario,
+        ];
+        $registration->rcv_pnab_registration = $pnab_reg;
+        $registration->save();
+    }
+
+    /**
+     * Aplica o plano de execução dentro da transação (já aberta pelo job).
+     * Não executa find*(); trabalha apenas com as decisões geradas na Fase A.
+     *
+     * @param array $plan ExecutionPlan produzido por buildExecutionPlan()
+     * @return array o mesmo plan, enriquecido com dados gerados na aplicação (ex.: ids/números)
+     */
+    public static function applyExecutionPlan(array $plan): array {
+        $app   = App::i();
+        $total = $plan['total_rows'];
+
+        $pnab_reg = self::findEntityById('Registration', $plan['pnab_registration_id'] ?? self::entityId($plan['pnab_registration']));
+        if (!$pnab_reg) {
+            throw new \Exception('Inscrição PNAB não encontrada durante a aplicação da importação.');
+        }
+
+        $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
+        $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
+
+        foreach ($plan['rows'] as $i => &$decision) {
+            $line = $decision['line'];
+
+            try {
+                // Ajustes diferidos da Fase A
+                self::applyDeferredWrites($decision);
+
+                // Aplicação do cenário
+                self::applyScenario($decision, $importer_seal, $waiting_seal, $pnab_reg);
+
+                $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
+
+                // Persistência por linha
+                $app->em->flush();
+
+                // Progresso
+                $percentage = number_format((($i + 1) / $total) * 100, 1) . '%';
+                self::generateImporterLog($pnab_reg,
+                    "[{$line}/{$total}] Cenário {$decision['scenario']} importado com sucesso{$context}");
+                self::updateImporterStatusFile($pnab_reg, [
+                    'status'    => 1,
+                    'message'   => $percentage,
+                    'timestamp' => date('d-m-Y H:i:s'),
+                ]);
+
+                // Compacta o decision para reduzir memória (Fase C só precisa de scenario + email + line).
+                // Evita manter em RAM: row, entidades Doctrine e estruturas de deferred.
+                $decision = [
+                    'line'     => $line,
+                    'scenario' => $decision['scenario'] ?? null,
+                    'email'    => $decision['email'] ?? [],
+                ];
+
+                $app->em->clear();
+                $pnab_reg = self::findEntityById('Registration', $plan['pnab_registration_id']);
+                if (!$pnab_reg) {
+                    throw new \Exception('Inscrição PNAB não encontrada durante a importação.');
+                }
+                $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
+                $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
+
+            } catch (\Throwable $e) {
+                $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
+                self::generateImporterLog($pnab_reg,
+                    "[{$line}/{$total}] Cenário {$decision['scenario']} ERRO{$context}: " . $e->getMessage());
+                throw $e;
+            }
+        }
+
+        $plan['pnab_registration'] = self::findEntityById('Registration', $plan['pnab_registration_id']);
+
+        return $plan;
+    }
+
+    /**
+     * Monta contexto padronizado para logs por cenário.
+     *
+     * Exemplo: " | reg:123 | org:456 | owner:789 | import:111"
+     */
+    private static function buildScenarioLogContext(array $decision, int $pnab_registration_id): string {
+        $parts = [
+            'reg:' . ((string) ($decision['registration_id'] ?? '-')),
+            'org:' . ((string) ($decision['organization_id'] ?? '-')),
+            'owner:' . ((string) ($decision['owner_id'] ?? '-')),
+            'import:' . $pnab_registration_id,
+        ];
+
+        return ' | ' . implode(' | ', $parts);
+    }
+
+    // -------------------------------------------------------------------------
+    // Fase C: envio de emails pós-commit
+    // -------------------------------------------------------------------------
+
+    /**
+     * Envia e-mails de notificação a partir do plano já aplicado.
+     *
+     * @param array $plan ExecutionPlan produzido por buildExecutionPlan() e aplicado por applyExecutionPlan()
+     * @return void
+     * @deprecated Assinatura antiga (array $data) substituída por (array $plan)
+     */
+    public static function sendEmails(array $plan): void {
+        $app = App::i();
+
+        foreach ($plan['rows'] as $decision) {
+            $e        = $decision['email'];
+            $scenario = $decision['scenario'];
+
+            switch ($scenario) {
+                case 1:
+                    $template = 'primeiro_caso.html';
+                    $template_data = [
+                        'siteName'           => $app->siteName,
+                        'userName'           => $e['user_name'],
+                        'registrationNumber' => $e['registration_number'],
+                        'redirectUrl'        => $app->createUrl('registration', 'single', [$e['registration_id']]),
+                        'organizationName'   => $e['organization_name'],
+                        'organizationCNPJ'   => $e['organization_cnpj'],
+                        'type'               => $e['category'],
+                    ];
+                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    break;
+
+                case 2:
+                    $template = 'segundo_caso.html';
+                    $template_data = [
+                        'siteName'         => $app->siteName,
+                        'userName'         => $e['user_name'],
+                        'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
+                        'organizationName' => $e['organization_name'],
+                        'organizationCNPJ' => $e['organization_cnpj'],
+                        'type'             => $e['category'],
+                    ];
+                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    break;
+
+                case 3.1:
+                    $template = 'terceiro_caso.html';
+                    $template_data = [
+                        'siteName'         => $app->siteName,
+                        'userName'         => $e['user_name'],
+                        'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
+                        'organizationName' => $e['organization_name'],
+                        'organizationCNPJ' => $e['organization_cnpj'],
+                        'type'             => $e['category'],
+                    ];
+                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    break;
+
+                case 4:
+                    $template = 'quarto_caso.html';
+                    $template_data = [
+                        'siteName'         => $app->siteName,
+                        'userName'         => $e['user_name'],
+                        'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
+                        'organizationName' => $e['organization_name'],
+                        'organizationCNPJ' => $e['organization_cnpj'],
+                        'type'             => $e['category'],
+                    ];
+                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    break;
+
+                case 5:
+                    $template = 'quinto_caso.html';
+                    $template_data = [
+                        'siteName'         => $app->siteName,
+                        'userName'         => $e['user_name'],
+                        'redirectUrl'      => $app->createUrl('site/atualizacao-cadastral'),
+                        'organizationName' => $e['organization_name'],
+                        'organizationCNPJ' => $e['organization_cnpj'],
+                        'type'             => $e['category'],
+                    ];
+                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    break;
+
+                default:
+                    continue 2;
+            }
 
             $app->createAndSendMailMessage([
-                'to'      => $to,
+                'to'      => $e['to'],
                 'subject' => $subject,
-                'body'    => $message,
+                'body'    => $app->renderMustacheTemplate($template, $template_data),
             ]);
         }
 
-        $registration = $data['registration'];
-
-        // Envia e-mail para o gestor com resumo da importação
-        $template_data = [
-            'siteName'           => $app->siteName,
-            'userName'           => $registration->owner->name,
-            'registrationNumber' => $registration->number,
-            'totalRows'          => $data['total_rows'],
-            'successRows'        => $data['success_rows']
-        ];
-
-        $to      = $registration->owner->emailPrivado;
-        $subject = "[Cultura Viva] Importação realizada com sucesso";
-        $message = $app->renderMustacheTemplate('import_summary.html', $template_data);
+        // Resumo para o gestor (dono da inscrição PNAB)
+        $pnab    = $plan['pnab_registration'];
+        $success = count(array_filter($plan['rows'], fn($d) => $d['scenario'] !== null));
 
         $app->createAndSendMailMessage([
-            'to'      => $to,
-            'subject' => $subject,
-            'body'    => $message,
+            'to'      => $pnab->owner->emailPrivado,
+            'subject' => '[Cultura Viva] Importação realizada com sucesso',
+            'body'    => $app->renderMustacheTemplate('import_summary.html', [
+                'siteName'           => $app->siteName,
+                'userName'           => $pnab->owner->name,
+                'registrationNumber' => $pnab->number,
+                'totalRows'          => $plan['total_rows'],
+                'successRows'        => $success,
+            ]),
         ]);
-
     }
 
     /**
      * Envia um e-mail de erro para o responsável pela inscrição.
      */
-    public static function sendEmailError(Registration $registration, $message) {
+    public static function sendEmailError(Registration $registration, $error) {
         $app = App::i();
+
+        $error_message = $error instanceof \Throwable
+            ? $error->getMessage()
+            : (string) $error;
 
         $template_data = [
             'siteName'           => $app->siteName,
             'userName'           => $registration->owner->name,
             'registrationNumber' => $registration->number,
-            'redirectUrl'        => $app->createUrl('registration', 'single', [$registration->id])
+            'redirectUrl'        => $app->createUrl('registration', 'single', [$registration->id]),
+            'errorMessage'       => $error_message,
         ];
 
         $to      = $registration->owner->emailPrivado;
         $subject = "[Cultura Viva] A importação da planilha falhou";
-        $message = $app->renderMustacheTemplate('import_error.html', $template_data);
+        $body    = $app->renderMustacheTemplate('import_error.html', $template_data);
 
         $app->createAndSendMailMessage([
             'to'      => $to,
             'subject' => $subject,
-            'body'    => $message
+            'body'    => $body
         ]);
     }
 
@@ -1095,7 +2104,7 @@ class Importer {
                 $allowed_legal_natures = ['1', '3', '2143', '3999', '3069', '3131', '3239', '3301', '3220'];
             }
 
-            // Se a natureza jurídica não for válida
+            // Natureza jurídica fora da lista permitida
             if (!in_array($legal_nature_code, $allowed_legal_natures)) {
                 $result['error'] = true;
                 $result['message'] = 'A natureza jurídica do CNPJ é inválida.';
@@ -1145,7 +2154,7 @@ class Importer {
     }
 
     public static function ensureTypeInArray(string $type_selected, ?array $tipo_ponto = null): array {
-         // Se o tipo de ponto já existir, não adiciona novamente
+        // Evita duplicar o tipo
         if($tipo_ponto && is_array($tipo_ponto) && !in_array($type_selected, $tipo_ponto)) {
             $tipo_ponto[] = $type_selected;
         } else if($tipo_ponto && !is_array($tipo_ponto)) {
