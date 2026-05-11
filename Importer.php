@@ -362,12 +362,36 @@ class Importer {
 
             $highestColumn = strtoupper((string) $sheet->getHighestColumn());
             if ($highestColumn !== 'M') {
-                return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+                $extraHeaderCells = $sheet->rangeToArray('N1:XFD1', null, true, true, true)[1] ?? [];
+                $hasExtraHeaderData = (bool) array_filter($extraHeaderCells, static function ($value) {
+                    return trim((string) $value) !== '';
+                });
+
+                if ($hasExtraHeaderData) {
+                    return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+                }
             }
 
             $highestRow = (int) $sheet->getHighestRow();
             if ($highestRow < 2) {
                 return [$field_file_id => [i::__('A planilha deve conter pelo menos uma linha de dados.')]];
+            }
+
+            if ($highestColumn !== 'M') {
+                $extraDataRows = $sheet->rangeToArray("N2:XFD{$highestRow}", null, true, true, true);
+                $hasExtraData = false;
+                foreach ($extraDataRows as $extraRow) {
+                    if ((bool) array_filter($extraRow, static function ($value) {
+                        return trim((string) $value) !== '';
+                    })) {
+                        $hasExtraData = true;
+                        break;
+                    }
+                }
+
+                if ($hasExtraData) {
+                    return [$field_file_id => [i::__('A planilha deve manter exatamente as colunas do modelo oficial (A até M), sem adicionar, remover ou mover colunas.')]];
+                }
             }
 
             $header     = $sheet->rangeToArray('A1:M1', null, true, true, true)[1];
