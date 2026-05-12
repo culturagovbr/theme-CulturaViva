@@ -2122,65 +2122,14 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         });
 
         // Valida a planilha das organizações certificadas antes do envio da inscrição
-        $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app, $self) {
+        $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app) {
             /** @var \MapasCulturais\Entities\Registration $this */
             if ($this->opportunity->id !== (int) $app->config['rcv.pnabOpportunityId']) {
                 return;
             }
 
-            ini_set('max_execution_time', 0);
-            ini_set('memory_limit', '1024M');  
-
-            if(!isset($app->config['rcv.pnabOpportunityAttachmentId']) || !isset($app->config['rcv.pnabOpportunityAttachmentId'])) {
-                $errorsResult['error'] = ['Erro inesperado, procure o suporte.'];
-                return;
-            }
-
-            $field_file_id = 'file_' . $app->config['rcv.pnabOpportunityAttachmentId'];
-            $pnab_attachment_id = 'rfc_' . $app->config['rcv.pnabOpportunityAttachmentId'];
-
-            if (!isset($this->files[$pnab_attachment_id])) {
-                $errorsResult[$field_file_id] = ['A planilha é obrigatória.'];
-                return;
-            }
-
-            $sheet = Importer::getSheet($this->files[$pnab_attachment_id]);
-
-            if (empty($sheet)) {
-                $errorsResult[$field_file_id] = ['Não foi possível abrir o arquivo enviado.'];
-                return;
-            }
-
-            try {
-                $header = $sheet->rangeToArray("A1:" . $sheet->getHighestColumn() . "1", null, true, true, true)[1];
-                $data_range = $sheet->rangeToArray("A2:" . $sheet->getHighestColumn() . $sheet->getHighestRow(), null, true, true, true);
-
-                if (empty($data_range)) {
-                    $errorsResult[$field_file_id] = [i::__('A planilha deve conter pelo menos uma linha de dados.')];
-                    return;
-                }
-
-                $validate_rows = [];
-
-                foreach ($data_range as $index => $row) {
-                    if (!array_filter($row)) {
-                        continue;
-                    }
-
-                    $parsed_row = Importer::parseRow($header, $row);
-
-                    if ($validate_row = Importer::validateRow($parsed_row, $index)) {
-                        $validate_rows = array_merge($validate_rows, $validate_row);
-                    }
-                }
-
-                if (!empty($validate_rows)) {
-                    $errorsResult[$field_file_id] = $validate_rows;
-                }
-                
-            } catch (\Exception $e) {
-                $errorsResult[$field_file_id] = ['A planilha não foi processada pois não está em conformidade com o modelo disponibilizado. Verifique as regras e tente novamente.'];
-                return;
+            foreach (Importer::validatePnabSpreadsheetForSend($this) as $field_key => $messages) {
+                $errorsResult[$field_key] = $messages;
             }
         });
 
