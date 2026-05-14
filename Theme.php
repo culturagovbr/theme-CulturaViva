@@ -692,16 +692,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if($opportunity->id == $app->config['rcv.opportunityId']) {
                 $opportunity->registerRegistrationMetadata();
                 
-                // Define a categoria `Aguardando cadastro via edital` para inscrições que responderam SIM no campo da pergunta 
-                // A organização está concorrendo em algum edital da Cultura Viva atualmente?
-                $field_name = $app->config['rcv.fieldQuestion'];
-                if($this->$field_name === $app->config['rcv.questionResponse']) {
-                    $app->disableAccessControl();
-                    $this->range = $app->config['rcv.rangesMap']['cadastro-via-edital'];
-                    $this->save(true);
-                    $app->enableAccessControl();
-                }
-
                 $organization = $this->relatedAgents['coletivo'][0];
                 $agent = $app->repo('Agent')->find($organization->id);
 
@@ -2130,45 +2120,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
             foreach (Importer::validatePnabSpreadsheetForSend($this) as $field_key => $messages) {
                 $errorsResult[$field_key] = $messages;
-            }
-        });
-
-        $app->hook('template(registration.view.main-app):before', function() use($app){
-            $registration = $this->controller->requestedEntity;
-            $field_name =  $app->config['rcv.fieldQuestion'];
-
-            if (empty($field_name)) {
-                return;
-            }
-
-            if ($registration->opportunity->id == $app->config['rcv.opportunityId'] && $registration->$field_name == $app->config['rcv.questionResponse']) {
-                $app->view->enqueueScript('components', 'registrationView', 'js/registration-view.js', []);
-            }
-        });
-
-        // Remove pergunta "A organização está concorrendo em algum edital da Cultura Viva atualmente" da tela de atualização cadastral
-        $app->hook('entity(Opportunity).registrationFieldConfigurations', function(&$result) use ($app, $self) {
-            /** @var \MapasCulturais\Entities\Opportunity $this */
-
-            $controller = $app->view->controller;
-
-            $referer = php_sapi_name() != "cli" ? $app->request->getReferer() : null;
-            $registration = $app->view->controller->requestedEntity ?? null;
-            $validating = false;
-
-            if($registration instanceof Registration) {
-                $registration_url = $app->createUrl('registration', 'registrationEdit', [$registration->id]);
-                $validating = $registration_url == ($referer[0] ?? false);
-            }
-
-            if($validating || ($this->id == $app->config['rcv.opportunityId'] && $controller && $controller->action == 'registrationEdit')) {
-                $concorrendo_edital = $app->config['rcv.fieldQuestion'];
-
-                $result = array_filter($result, function($field) use ($concorrendo_edital) {
-                    return $field->fieldName != $concorrendo_edital;
-                });
-
-                $result = array_values($result);
             }
         });
 
