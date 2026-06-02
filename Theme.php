@@ -667,7 +667,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $agent_relations = $agent->agentRelations;
 
                 foreach($agent_relations as $relation) {
-                    if($relation->agent->id == $user->profile->id && $relation->status == AgentRelation::STATUS_ENABLED) {
+                    if($relation->agent->id == $user->profile->id && in_array($relation->status, [AgentRelation::STATUS_ENABLED, -5])) {
                         $enable_editable_fields = true;
                         break;
                     }
@@ -676,6 +676,29 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
             if(($_SESSION["{$this}:editableFields"] ?? false) || $enable_editable_fields) {
                 $canUser = true;
+            }
+        });
+
+        // Permite acesso à inscrição RCV para usuários com relação pendente (convite não aceito)
+        $app->hook('entity(Registration).canUser(<<view|@control|modify>>)', function($user, &$canUser) use($app) {
+            if ($canUser || $user->is('admin') || $this->opportunity->id != $app->config['rcv.opportunityId']) {
+                return;
+            }
+
+            $coletivo = $this->relatedAgents['coletivo'][0] ?? null;
+            if ($coletivo) {
+                $hasRelation = $app->em->getConnection()->fetchOne("
+                    SELECT 1 FROM agent_relation 
+                    WHERE object_id = :collectiveId 
+                      AND object_type = 'MapasCulturais\\Entities\\Agent' 
+                      AND agent_id = :agentId 
+                      AND status IN (1, -5)
+                    LIMIT 1
+                ", ['collectiveId' => $coletivo->id, 'agentId' => $user->profile->id]);
+
+                if ($hasRelation) {
+                    $canUser = true;
+                }
             }
         });
 
