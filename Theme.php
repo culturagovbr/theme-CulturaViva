@@ -64,6 +64,14 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $queryParams['id'] = "IN({$seals})";
         });
 
+        $app->hook('Theme::enqueueComponentScript', function($result, string $component, array $dependences = []) {
+            if ($component !== 'qualification-evaluation-form') {
+                return;
+            }
+
+            $this->enqueueScript('components', 'culturaviva-qualification-evaluation-recommendations', 'js/qualification-evaluation-recommendations.js', ['qualification-evaluation-form']);
+        }, 1000);
+
         // Ajusta titulo da página do formulário
         $app->hook('mapasculturais.getTitle', function(&$title) use ($app) {
             $entity = $this->controller->requestedEntity;
