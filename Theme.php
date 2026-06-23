@@ -3052,6 +3052,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             'category' => $categoryLabel,
             'oppId' => $opportunityId,
             'trash' => Registration::STATUS_TRASH,
+            'notApproved' => Registration::STATUS_NOTAPPROVED,
         ];
         $excludeSql = '';
         if ($excludeColetivoAgentId !== null) {
@@ -3071,6 +3072,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             WHERE r.opportunity_id = :oppId
               AND r.category = :category
               AND r.status != :trash
+              AND r.status != :notApproved
             {$excludeSql}
         ";
 
