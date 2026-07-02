@@ -134,8 +134,14 @@ $this->import('
         <div class="main-header__buttons">
             <?php $this->applyTemplateHook('mc-header-menu-user', 'before') ?>
             <?php if ($app->user->is('guest')): ?>
+                <?php
+                    $_authUrl     = $app->createUrl('auth');
+                    $_authPath    = parse_url($_authUrl, PHP_URL_PATH);
+                    $_currentPath = strtok($_SERVER['REQUEST_URI'], '?');
+                    $_redirect    = ($_currentPath !== $_authPath) ? '?redirectTo=' . urlencode($_SERVER['REQUEST_URI']) : '';
+                ?>
                 <!-- Botão login -->
-                <a href="<?= $app->createUrl('auth') ?>?redirectTo=<?= $_SERVER['REQUEST_URI'] ?>" class="logIn">
+                <a href="<?= $_authUrl . $_redirect ?>" class="logIn">
                     <?php i::_e('Entrar') ?>
                 </a>
             <?php else: ?>
