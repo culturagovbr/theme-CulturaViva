@@ -65,7 +65,9 @@ $term_url = $app->createUrl('site', 'termoAdesao');
 
                 <li v-if="global.enabledEntities.agents">
                     <a href="https://www.gov.br/culturaviva/pt-br">
-                        <img src="<?php $this->asset('img/rcv-footer/selo-cultura.png') ?>" alt=""/>
+                        <?php // Defeso eleitoral (ASCOM): selo no mesmo cinza das demais logos.
+                              // Reversível: basta voltar para 'img/rcv-footer/selo-cultura.png'. ?>
+                        <img src="<?php $this->asset('img/rcv-footer/selo-cultura-defeso.png') ?>" alt=""/>
                         <?php i::_e('Portal Cultura Viva'); ?>
                     </a>
                 </li>
