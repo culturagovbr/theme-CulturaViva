@@ -362,3 +362,26 @@ $defeso-border: #dcdcdc;
         color: $defeso-title;
     }
 }
+
+// Cards de acesso externo (Portal Cultura Viva, Mapa da Cultura). Aqui o defeso
+// remove apenas os ícones — o fundo e as cores institucionais do card seguem
+// como no restante do ano.
+.rcv-home-cards {
+    &__card-icon {
+        display: none;
+    }
+
+    // Sem o ícone, a coluna estreita reservada a ele deixaria o texto
+    // espremido — o conteúdo passa a ocupar uma coluna única.
+    &__card-content {
+        grid-template-columns: 1fr;
+    }
+
+    // No mobile a descrição ocupava as duas colunas do grid original; num
+    // grid de coluna única esse span criaria uma coluna implícita.
+    &__card-description {
+        @media screen and (max-width: 50rem) {
+            grid-column: 1;
+        }
+    }
+}
