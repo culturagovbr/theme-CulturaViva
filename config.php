@@ -15,7 +15,9 @@ return [
 
     ex: `img/meu-mapa-logo.jpg` (pasta assets/img/meu-mapa-logo.jpg do tema) 
     */
-    'logo.image' => 'img/logo.png',
+    // Defeso eleitoral (ASCOM): logo monocromática no lugar da colorida.
+    // Reversível: basta voltar para 'img/logo.png', que segue no repositório.
+    'logo.image' => 'img/logo-defeso.png',
 
     /* Esconde o título e subtitulo */
     'logo.hideLabel' => true,

@@ -385,3 +385,19 @@ $defeso-border: #dcdcdc;
         }
     }
 }
+
+// Altura da logo no cabeçalho. A logo colorida original traz uma margem
+// transparente embutida — a arte ocupa 79% da altura do arquivo — enquanto a
+// de defeso vem recortada rente. Como o cabeçalho dimensiona pela altura do
+// arquivo (_main-header.scss), a regra de 87px de lá renderiza a arte de defeso
+// bem maior que os 69px visíveis da colorida. Além de compensar isso, a arte de
+// defeso é mais horizontal (proporção 2.95 contra 2.06), então foi reduzida um
+// pouco além da altura da colorida para não pesar na barra.
+// O !important acompanha o da regra sobrescrita.
+.main-header .theme-logo__logo--img > img {
+    max-height: 3.4375rem !important; // 55px
+
+    @media screen and (max-width: 50rem) {
+        max-height: 2.1875rem !important; // 35px
+    }
+}
