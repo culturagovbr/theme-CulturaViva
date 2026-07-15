@@ -72,7 +72,10 @@ $term_url = $app->createUrl('site', 'termoAdesao');
 
                 <li v-if="global.enabledEntities.projects">
                     <a href="https://mapa.cultura.gov.br/">
-                        <img src="<?php $this->asset('img/rcv-footer/icone-cultura.png') ?>" alt=""/>
+                        <?php // Defeso eleitoral (ASCOM): símbolo do Mapa da Cultura substituído pela
+                              // letra "M" neutra, o mesmo desenho do favicon de defeso do theme-MapaMinC.
+                              // Reversível: basta voltar para 'img/rcv-footer/icone-cultura.png'. ?>
+                        <img src="<?php $this->asset('img/rcv-footer/icone-cultura-defeso.svg') ?>" alt=""/>
                         <?php i::_e('Mapa da Cultura'); ?>
                     </a>
                 </li>
