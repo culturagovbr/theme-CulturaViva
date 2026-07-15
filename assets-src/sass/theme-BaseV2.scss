@@ -363,6 +363,25 @@ $defeso-border: #dcdcdc;
     }
 }
 
+// Colagem de fundo do cabeçalho (foto de pessoa sobre grafismos). A colagem é
+// uma camada absoluta atrás do conteúdo, então ocultá-la não altera a altura do
+// cabeçalho — o próprio __content já tem height fixa. O título e a descrição já
+// são escuros no tema (não dependiam da foto para contraste) e seguem legíveis.
+//
+// O fundo branco vai no __content, não no .home-header: era a colagem — que tem
+// fundo branco — quem criava a faixa clara do topo, destacada do cinza da seção
+// de cards logo abaixo. Pintar o .home-header inteiro alcançaria também os
+// cards e o mapa, fundindo as duas áreas num bloco só.
+.home-header {
+    &__content {
+        background: $white;
+    }
+
+    &__background {
+        display: none;
+    }
+}
+
 // Cards de acesso externo (Portal Cultura Viva, Mapa da Cultura). Aqui o defeso
 // remove apenas os ícones — o fundo e as cores institucionais do card seguem
 // como no restante do ano.
