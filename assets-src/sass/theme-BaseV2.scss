@@ -375,10 +375,80 @@ $defeso-border: #dcdcdc;
 .home-header {
     &__content {
         background: $white;
+
+        // Afasta os dois blocos: o texto encosta mais à esquerda e as logos mais
+        // à direita, à custa de margens laterais menores. Só onde as logos
+        // aparecem — abaixo de 811px o texto mantém o padding do tema.
+        // A margem é o que sobra para o vão: quanto maior, mais perto um do
+        // outro. Em ~1680px de viewport, estes 18,25% deixam ~250px de vão.
+        @media screen and (min-width: 50.75rem) {
+            justify-content: space-between;
+            padding-left: 18.25%;
+            padding-right: 18.25%;
+        }
     }
 
     &__background {
         display: none;
+    }
+
+    // O tema desloca o texto para a direita (left: 9%, 25% acima de 1500px) para
+    // compor com a colagem, que ficava atrás dele. Com as logos ocupando a
+    // direita esse deslocamento joga o texto contra elas; o space-between do
+    // __content já dá a posição dos dois blocos.
+    &__main {
+        @media screen and (min-width: 50.75rem) {
+            left: 0;
+        }
+    }
+
+    // Logos institucionais no lugar da colagem: ocupam a coluna da direita que
+    // era da foto, para o banner não ficar vazio e o contraste de peso com o
+    // texto à esquerda se manter. O texto segue com o posicionamento do tema.
+    &__institutional {
+        align-items: center;
+        display: flex;
+        // Largura natural (a das logos): quem posiciona os dois blocos é o
+        // space-between do __content. Com flex:1 o bloco tomaria a coluna
+        // restante e as logos ficariam no meio dela, longe da borda.
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 1.5rem;
+        justify-content: center;
+        // O __main combina margin-top: 5rem com top: -5rem; sob o
+        // align-items:center do __content esse par o deixa meia margem acima do
+        // centro. Repetimos o par para os dois blocos partilharem a mesma linha.
+        margin-top: 5rem;
+        top: -5rem;
+        // z-index acompanha o do __main — o :before do __content cobre a área toda.
+        position: relative;
+        z-index: 2;
+
+        // Abaixo de 811px o __content aperta (min-height menor, texto em 80% da
+        // largura) e não sobra coluna para as logos.
+        @media screen and (max-width: 50.6875rem) {
+            display: none;
+        }
+    }
+
+    &__institutional-minc {
+        max-width: 18.75rem;
+        width: 100%;
+    }
+
+    &__institutional-divider {
+        border: 0;
+        border-top: 1px solid $gray-300;
+        margin: 0;
+        max-width: 18.75rem;
+        width: 100%;
+    }
+
+    // Estreita de propósito: a marca é vertical (símbolo sobre texto), então na
+    // mesma largura da logo do Ministério ficaria três vezes mais alta que ela.
+    &__institutional-brand {
+        max-width: 9rem;
+        width: 100%;
     }
 }
 

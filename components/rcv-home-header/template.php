@@ -25,6 +25,21 @@ $this->import('
             </p>
         </div>
         
+        <?php
+        // Defeso eleitoral (ASCOM): a colagem de fundo (foto) sai de cena e o seu
+        // lugar recebe as logos institucionais, para o banner não ficar vazio.
+        // Reversível: remover este bloco e o display:none do __background.
+        ?>
+        <div class="home-header__institutional">
+            <img class="home-header__institutional-minc"
+                 src="<?php $this->asset('img/rcv-home-header/minc-defeso.png') ?>"
+                 alt="<?php i::esc_attr_e('Ministério da Cultura'); ?>" />
+            <hr class="home-header__institutional-divider" />
+            <img class="home-header__institutional-brand"
+                 src="<?php $this->asset('img/rcv-home-header/logo-culturaviva-vertical-defeso.png') ?>"
+                 alt="<?php i::esc_attr_e('Cultura Viva'); ?>" />
+        </div>
+
         <div class="home-header__background">
             <div class="img">
                 <img src="<?php $this->asset('img/rcv-home-header/background.png') ?>" />
