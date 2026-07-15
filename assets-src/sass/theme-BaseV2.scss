@@ -490,3 +490,11 @@ $defeso-border: #dcdcdc;
         max-height: 2.1875rem !important; // 35px
     }
 }
+
+// O rodapé exibe a mesma logo do cabeçalho, mas o tema a renderiza bem maior
+// (max-height de 100px, contra os 55px de cima) e ela ainda esbarra no
+// max-width de 268px do tema. Com a arte de defeso, mais horizontal, a
+// diferença entre os dois pontos fica evidente — igualamos ao cabeçalho.
+.main-footer__content--logo-img > a .theme-logo__logo--img > img {
+    max-height: 3.4375rem !important; // 55px — mesmo tamanho do cabeçalho
+}
