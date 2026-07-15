@@ -450,6 +450,22 @@ $defeso-border: #dcdcdc;
         max-width: 9rem;
         width: 100%;
     }
+
+    // Card "Mapa da Rede": o fundo magenta dá lugar ao mesmo neutro dos cards de
+    // entidades e o texto, que era branco sobre o magenta, escurece. O mapa em si
+    // guarda o verde, só bem dessaturado, pela imagem (home-map-defeso.png) e não
+    // por filtro, para não depender de suporte a filter. Era a cor de fundo que
+    // delimitava o card contra o cinza da página — sem ela o box-shadow do tema
+    // não basta, daí a borda.
+    &__map-container {
+        background-color: $defeso-neutral;
+        border: 1px solid $defeso-border;
+    }
+
+    &__map-title,
+    &__map-description {
+        color: $defeso-title;
+    }
 }
 
 // Cards de acesso externo (Portal Cultura Viva, Mapa da Cultura). Aqui o defeso

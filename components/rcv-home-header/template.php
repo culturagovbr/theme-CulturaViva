@@ -88,7 +88,9 @@ $this->import('
     <a href="/mapa/#map">
         <div class="home-header__map">
             <div class="home-header__map-container">
-                <div class="home-header__map-img"><img src="<?php $this->asset('img/rcv-home-header/home-map.png') ?>"></div>
+                <?php // Defeso eleitoral (ASCOM): mapa em verde dessaturado no lugar do vibrante.
+                      // Reversível: basta voltar para 'img/rcv-home-header/home-map.png'. ?>
+                <div class="home-header__map-img"><img src="<?php $this->asset('img/rcv-home-header/home-map-defeso.png') ?>"></div>
                 <div class="home-header__map-content">
                     <h3 class="home-header__map-title"><?= $this->text('description', i::__('Mapa da rede')) ?></h3>
                     <p class="home-header__map-description"><?= $this->text('description', i::__('Confira a localização dos Pontos e Pontões de Cultura')) ?></p>
