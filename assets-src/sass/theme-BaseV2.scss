@@ -326,3 +326,39 @@ $border-radius-pill: 64px;
         }
     }
 }
+
+// Defeso eleitoral (solicitação ASCOM) — ajustes temporários na identidade
+// visual da home. Reversível: basta remover estas regras.
+$defeso-neutral: #f9f9f9;
+$defeso-title: #333333;
+$defeso-border: #dcdcdc;
+
+// Fotos dos cards de entidades (Política Nacional Cultura Viva, Certificados
+// e Selos, Comissões, Redes de Pontos e Pontões, Espaço do gestor,
+// Indicadores). Só cor e fundo — altura e espaçamentos permanecem intactos.
+.home-entities__content--cards {
+    .card {
+        border: 1px solid $defeso-border;
+    }
+
+    .card__left--img {
+        background-color: $defeso-neutral;
+
+        // visibility (e não display) preserva o espaço ocupado pela foto,
+        // mantendo a altura original do card.
+        img {
+            visibility: hidden;
+        }
+    }
+
+    // O tema aplica um overlay escuro sobre a coluna esquerda para dar
+    // contraste ao texto branco por cima da foto. Sem a foto, esse overlay
+    // escurece o fundo neutro — neutralizamos aqui.
+    .card__left--content {
+        background-color: transparent;
+    }
+
+    .card__left--content-title .title {
+        color: $defeso-title;
+    }
+}
