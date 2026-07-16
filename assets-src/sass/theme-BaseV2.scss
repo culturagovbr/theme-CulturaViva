@@ -326,3 +326,191 @@ $border-radius-pill: 64px;
         }
     }
 }
+
+// Defeso eleitoral (solicitação ASCOM) — ajustes temporários na identidade
+// visual da home. Reversível: basta remover estas regras.
+$defeso-neutral: #f9f9f9;
+$defeso-title: #333333;
+$defeso-border: #dcdcdc;
+
+// Fotos dos cards de entidades (Política Nacional Cultura Viva, Certificados
+// e Selos, Comissões, Redes de Pontos e Pontões, Espaço do gestor,
+// Indicadores). Só cor e fundo — altura e espaçamentos permanecem intactos.
+.home-entities__content--cards {
+    .card {
+        border: 1px solid $defeso-border;
+    }
+
+    .card__left--img {
+        background-color: $defeso-neutral;
+
+        // visibility (e não display) preserva o espaço ocupado pela foto,
+        // mantendo a altura original do card.
+        img {
+            visibility: hidden;
+        }
+    }
+
+    // O tema aplica um overlay escuro sobre a coluna esquerda para dar
+    // contraste ao texto branco por cima da foto. Sem a foto, esse overlay
+    // escurece o fundo neutro — neutralizamos aqui.
+    .card__left--content {
+        background-color: transparent;
+    }
+
+    .card__left--content-title .title {
+        color: $defeso-title;
+    }
+}
+
+// Colagem de fundo do cabeçalho (foto de pessoa sobre grafismos). A colagem é
+// uma camada absoluta atrás do conteúdo, então ocultá-la não altera a altura do
+// cabeçalho — o próprio __content já tem height fixa. O título e a descrição já
+// são escuros no tema (não dependiam da foto para contraste) e seguem legíveis.
+//
+// O fundo branco vai no __content, não no .home-header: era a colagem — que tem
+// fundo branco — quem criava a faixa clara do topo, destacada do cinza da seção
+// de cards logo abaixo. Pintar o .home-header inteiro alcançaria também os
+// cards e o mapa, fundindo as duas áreas num bloco só.
+.home-header {
+    &__content {
+        background: $white;
+
+        // Afasta os dois blocos: o texto encosta mais à esquerda e as logos mais
+        // à direita, à custa de margens laterais menores. Só onde as logos
+        // aparecem — abaixo de 811px o texto mantém o padding do tema.
+        // A margem é o que sobra para o vão: quanto maior, mais perto um do
+        // outro. Em ~1680px de viewport, estes 18,25% deixam ~250px de vão.
+        @media screen and (min-width: 50.75rem) {
+            justify-content: space-between;
+            padding-left: 18.25%;
+            padding-right: 18.25%;
+        }
+    }
+
+    &__background {
+        display: none;
+    }
+
+    // O tema desloca o texto para a direita (left: 9%, 25% acima de 1500px) para
+    // compor com a colagem, que ficava atrás dele. Com as logos ocupando a
+    // direita esse deslocamento joga o texto contra elas; o space-between do
+    // __content já dá a posição dos dois blocos.
+    &__main {
+        @media screen and (min-width: 50.75rem) {
+            left: 0;
+        }
+    }
+
+    // Logos institucionais no lugar da colagem: ocupam a coluna da direita que
+    // era da foto, para o banner não ficar vazio e o contraste de peso com o
+    // texto à esquerda se manter. O texto segue com o posicionamento do tema.
+    &__institutional {
+        align-items: center;
+        display: flex;
+        // Largura natural (a das logos): quem posiciona os dois blocos é o
+        // space-between do __content. Com flex:1 o bloco tomaria a coluna
+        // restante e as logos ficariam no meio dela, longe da borda.
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 1.5rem;
+        justify-content: center;
+        // O __main combina margin-top: 5rem com top: -5rem; sob o
+        // align-items:center do __content esse par o deixa meia margem acima do
+        // centro. Repetimos o par para os dois blocos partilharem a mesma linha.
+        margin-top: 5rem;
+        top: -5rem;
+        // z-index acompanha o do __main — o :before do __content cobre a área toda.
+        position: relative;
+        z-index: 2;
+
+        // Abaixo de 811px o __content aperta (min-height menor, texto em 80% da
+        // largura) e não sobra coluna para as logos.
+        @media screen and (max-width: 50.6875rem) {
+            display: none;
+        }
+    }
+
+    &__institutional-minc {
+        max-width: 18.75rem;
+        width: 100%;
+    }
+
+    &__institutional-divider {
+        border: 0;
+        border-top: 1px solid $gray-300;
+        margin: 0;
+        max-width: 18.75rem;
+        width: 100%;
+    }
+
+    // Estreita de propósito: a marca é vertical (símbolo sobre texto), então na
+    // mesma largura da logo do Ministério ficaria três vezes mais alta que ela.
+    &__institutional-brand {
+        max-width: 9rem;
+        width: 100%;
+    }
+
+    // Card "Mapa da Rede": o fundo magenta dá lugar ao mesmo neutro dos cards de
+    // entidades e o texto, que era branco sobre o magenta, escurece. O mapa em si
+    // guarda o verde, só bem dessaturado, pela imagem (home-map-defeso.png) e não
+    // por filtro, para não depender de suporte a filter. Era a cor de fundo que
+    // delimitava o card contra o cinza da página — sem ela o box-shadow do tema
+    // não basta, daí a borda.
+    &__map-container {
+        background-color: $defeso-neutral;
+        border: 1px solid $defeso-border;
+    }
+
+    &__map-title,
+    &__map-description {
+        color: $defeso-title;
+    }
+}
+
+// Cards de acesso externo (Portal Cultura Viva, Mapa da Cultura). Aqui o defeso
+// remove apenas os ícones — o fundo e as cores institucionais do card seguem
+// como no restante do ano.
+.rcv-home-cards {
+    &__card-icon {
+        display: none;
+    }
+
+    // Sem o ícone, a coluna estreita reservada a ele deixaria o texto
+    // espremido — o conteúdo passa a ocupar uma coluna única.
+    &__card-content {
+        grid-template-columns: 1fr;
+    }
+
+    // No mobile a descrição ocupava as duas colunas do grid original; num
+    // grid de coluna única esse span criaria uma coluna implícita.
+    &__card-description {
+        @media screen and (max-width: 50rem) {
+            grid-column: 1;
+        }
+    }
+}
+
+// Altura da logo no cabeçalho. A logo colorida original traz uma margem
+// transparente embutida — a arte ocupa 79% da altura do arquivo — enquanto a
+// de defeso vem recortada rente. Como o cabeçalho dimensiona pela altura do
+// arquivo (_main-header.scss), a regra de 87px de lá renderiza a arte de defeso
+// bem maior que os 69px visíveis da colorida. Além de compensar isso, a arte de
+// defeso é mais horizontal (proporção 2.95 contra 2.06), então foi reduzida um
+// pouco além da altura da colorida para não pesar na barra.
+// O !important acompanha o da regra sobrescrita.
+.main-header .theme-logo__logo--img > img {
+    max-height: 3.4375rem !important; // 55px
+
+    @media screen and (max-width: 50rem) {
+        max-height: 2.1875rem !important; // 35px
+    }
+}
+
+// O rodapé exibe a mesma logo do cabeçalho, mas o tema a renderiza bem maior
+// (max-height de 100px, contra os 55px de cima) e ela ainda esbarra no
+// max-width de 268px do tema. Com a arte de defeso, mais horizontal, a
+// diferença entre os dois pontos fica evidente — igualamos ao cabeçalho.
+.main-footer__content--logo-img > a .theme-logo__logo--img > img {
+    max-height: 3.4375rem !important; // 55px — mesmo tamanho do cabeçalho
+}

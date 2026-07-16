@@ -65,14 +65,19 @@ $term_url = $app->createUrl('site', 'termoAdesao');
 
                 <li v-if="global.enabledEntities.agents">
                     <a href="https://www.gov.br/culturaviva/pt-br">
-                        <img src="<?php $this->asset('img/rcv-footer/selo-cultura.png') ?>" alt=""/>
+                        <?php // Defeso eleitoral (ASCOM): selo no mesmo cinza das demais logos.
+                              // Reversível: basta voltar para 'img/rcv-footer/selo-cultura.png'. ?>
+                        <img src="<?php $this->asset('img/rcv-footer/selo-cultura-defeso.png') ?>" alt=""/>
                         <?php i::_e('Portal Cultura Viva'); ?>
                     </a>
                 </li>
 
                 <li v-if="global.enabledEntities.projects">
                     <a href="https://mapa.cultura.gov.br/">
-                        <img src="<?php $this->asset('img/rcv-footer/icone-cultura.png') ?>" alt=""/>
+                        <?php // Defeso eleitoral (ASCOM): símbolo do Mapa da Cultura substituído pela
+                              // letra "M" neutra, o mesmo desenho do favicon de defeso do theme-MapaMinC.
+                              // Reversível: basta voltar para 'img/rcv-footer/icone-cultura.png'. ?>
+                        <img src="<?php $this->asset('img/rcv-footer/icone-cultura-defeso.svg') ?>" alt=""/>
                         <?php i::_e('Mapa da Cultura'); ?>
                     </a>
                 </li>

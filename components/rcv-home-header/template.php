@@ -25,6 +25,21 @@ $this->import('
             </p>
         </div>
         
+        <?php
+        // Defeso eleitoral (ASCOM): a colagem de fundo (foto) sai de cena e o seu
+        // lugar recebe as logos institucionais, para o banner não ficar vazio.
+        // Reversível: remover este bloco e o display:none do __background.
+        ?>
+        <div class="home-header__institutional">
+            <img class="home-header__institutional-minc"
+                 src="<?php $this->asset('img/rcv-home-header/minc-defeso.png') ?>"
+                 alt="<?php i::esc_attr_e('Ministério da Cultura'); ?>" />
+            <hr class="home-header__institutional-divider" />
+            <img class="home-header__institutional-brand"
+                 src="<?php $this->asset('img/rcv-home-header/logo-culturaviva-vertical-defeso.png') ?>"
+                 alt="<?php i::esc_attr_e('Cultura Viva'); ?>" />
+        </div>
+
         <div class="home-header__background">
             <div class="img">
                 <img src="<?php $this->asset('img/rcv-home-header/background.png') ?>" />
@@ -73,7 +88,9 @@ $this->import('
     <a href="/mapa/#map">
         <div class="home-header__map">
             <div class="home-header__map-container">
-                <div class="home-header__map-img"><img src="<?php $this->asset('img/rcv-home-header/home-map.png') ?>"></div>
+                <?php // Defeso eleitoral (ASCOM): mapa em verde dessaturado no lugar do vibrante.
+                      // Reversível: basta voltar para 'img/rcv-home-header/home-map.png'. ?>
+                <div class="home-header__map-img"><img src="<?php $this->asset('img/rcv-home-header/home-map-defeso.png') ?>"></div>
                 <div class="home-header__map-content">
                     <h3 class="home-header__map-title"><?= $this->text('description', i::__('Mapa da rede')) ?></h3>
                     <p class="home-header__map-description"><?= $this->text('description', i::__('Confira a localização dos Pontos e Pontões de Cultura')) ?></p>
