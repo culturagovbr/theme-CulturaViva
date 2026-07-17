@@ -42,6 +42,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         parent::_init();
 
         $app = App::i();
+        EvaluationDistribution::register();
 
         $self = $this;
 
