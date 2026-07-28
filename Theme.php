@@ -1611,6 +1611,30 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }   
         });
 
+        $normalize_spreadsheet_select = function (&$query) {
+            if (!isset($query['@select'])) {
+                return;
+            }
+
+            $query['@select'] = str_replace([
+                "terms['acao_estruturante'].join(', ')",
+                "terms['acao_estruturante_outra'].join(', ')",
+                "terms['rcv_principais_segmentos'].join(', ')",
+                "terms['rcv_atuacao_demais_segmentos'].join(', ')",
+            ], [
+                'acao_estruturante',
+                'acao_estruturante_outra',
+                'rcv_principais_segmentos',
+                'rcv_atuacao_demais_segmentos',
+            ], $query['@select']);
+        };
+
+        $app->hook('SpreadsheetJob(entities-spreadsheets).getHeader:before', function($job, &$query) use($normalize_spreadsheet_select) {
+            if($job->entityClassName == Agent::class) {
+                $normalize_spreadsheet_select($query);
+            }
+        });
+
         $app->hook('SpreadsheetJob(entities-spreadsheets).getHeader:after', function($job, &$result) use($app, $theme) {
             if($job->entityClassName == Agent::class) {
                 foreach($result as $key => $value) {
@@ -1619,7 +1643,10 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
-        $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:before', function($job, &$query) {
+        $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:before', function($job, &$query) use($normalize_spreadsheet_select) {
+            if($job->entityClassName == Agent::class) {
+                $normalize_spreadsheet_select($query);
+            }
             $query['status'] = API::GT(0);
         });
 
