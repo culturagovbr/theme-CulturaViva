@@ -2289,6 +2289,27 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        // Remove metadado do tipo 'entity' do @select: vira entidade Doctrine e o
+        // replaceArraysWithNull do core recursa infinitamente nas referências de volta
+        $remove_entity_metadata_from_select = function (&$query) {
+            if (empty($query['@select'])) {
+                return;
+            }
+
+            $query['@select'] = implode(',', array_filter(
+                array_map('trim', explode(',', $query['@select'])),
+                fn($field) => $field !== '' && $field !== 'rcv_pnab_registration'
+            ));
+        };
+
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:before', function($job, &$query) use($remove_entity_metadata_from_select) {
+            $remove_entity_metadata_from_select($query);
+        });
+
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getBatch:before', function($job, &$query) use($remove_entity_metadata_from_select) {
+            $remove_entity_metadata_from_select($query);
+        });
+
         $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:after', function($job, &$result) use($app, $theme) {
             //Remoção das coluna no envio da planilha
             if (isset($result['rcv_tipo'])) {
