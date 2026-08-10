@@ -42,6 +42,11 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         parent::_init();
 
         $app = App::i();
+
+        if ($app->config['rybena.enabled']) {
+            $this->enqueueScript('app-v2', 'rybena', $app->config['rybena.script']);
+        }
+
         EvaluationDistribution::register();
 
         $self = $this;
