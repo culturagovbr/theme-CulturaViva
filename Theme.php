@@ -1601,6 +1601,30 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }   
         });
 
+        $normalize_spreadsheet_select = function (&$query) {
+            if (!isset($query['@select'])) {
+                return;
+            }
+
+            $query['@select'] = str_replace([
+                "terms['acao_estruturante'].join(', ')",
+                "terms['acao_estruturante_outra'].join(', ')",
+                "terms['rcv_principais_segmentos'].join(', ')",
+                "terms['rcv_atuacao_demais_segmentos'].join(', ')",
+            ], [
+                'acao_estruturante',
+                'acao_estruturante_outra',
+                'rcv_principais_segmentos',
+                'rcv_atuacao_demais_segmentos',
+            ], $query['@select']);
+        };
+
+        $app->hook('SpreadsheetJob(entities-spreadsheets).getHeader:before', function($job, &$query) use($normalize_spreadsheet_select) {
+            if($job->entityClassName == Agent::class) {
+                $normalize_spreadsheet_select($query);
+            }
+        });
+
         $app->hook('SpreadsheetJob(entities-spreadsheets).getHeader:after', function($job, &$result) use($app, $theme) {
             if($job->entityClassName == Agent::class) {
                 foreach($result as $key => $value) {
@@ -1609,7 +1633,10 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
-        $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:before', function($job, &$query) {
+        $app->hook('SpreadsheetJob(entities-spreadsheets).getBatch:before', function($job, &$query) use($normalize_spreadsheet_select) {
+            if($job->entityClassName == Agent::class) {
+                $normalize_spreadsheet_select($query);
+            }
             $query['status'] = API::GT(0);
         });
 
@@ -2213,6 +2240,27 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        // Remove metadado do tipo 'entity' do @select: vira entidade Doctrine e o
+        // replaceArraysWithNull do core recursa infinitamente nas referências de volta
+        $remove_entity_metadata_from_select = function (&$query) {
+            if (empty($query['@select'])) {
+                return;
+            }
+
+            $query['@select'] = implode(',', array_filter(
+                array_map('trim', explode(',', $query['@select'])),
+                fn($field) => $field !== '' && $field !== 'rcv_pnab_registration'
+            ));
+        };
+
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:before', function($job, &$query) use($remove_entity_metadata_from_select) {
+            $remove_entity_metadata_from_select($query);
+        });
+
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getBatch:before', function($job, &$query) use($remove_entity_metadata_from_select) {
+            $remove_entity_metadata_from_select($query);
+        });
+
         $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:after', function($job, &$result) use($app, $theme) {
             //Remoção das coluna no envio da planilha
             if (isset($result['rcv_tipo'])) {
@@ -2334,6 +2382,130 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
             $verificationSeals = $app->config['rcv.verificationSeals'] ?? null;
             $legalRepKey = $app->config['rcv.legalRepresentative'] ?? null;
+            $fieldAddLegalRepresentative = $app->config['rcv.addLegalRepresentative'] ?? null;
+            $organizationIsBrazilKey = $app->config['rcv.organizationIsBrazil'] ?? null;
+            $countryKey = $app->config['rcv.country'] ?? null;
+            $addressSetKey = $app->config['rcv.addressSet'] ?? null;
+            $postalCodeKey = $app->config['rcv.postalCode'] ?? null;
+            $stateKey = $app->config['rcv.state'] ?? null;
+            $publicPlaceKey = $app->config['rcv.publicPlace'] ?? null;
+            $addressNumberKey = $app->config['rcv.addressNumber'] ?? null;
+            $cityOfAddressKey = $app->config['rcv.cityOfAddress'] ?? null;
+            $nameCulturePointKey = $app->config['rcv.nameCulturePoint'] ?? null;
+            $namePontoColletivoKey = $app->config['rcv.namePontoColletivo'] ?? null;
+            $nomePontaoDeCulturaKey = $app->config['rcv.nomePontaoDeCultura'] ?? null;
+
+            $ownerUrlByRegistrationId = [];
+            $collectiveUrlByRegistrationId = [];
+            $collectiveIdByRegistrationId = [];
+            $otherSealsByCollectiveId = [];
+            $otherSealsByRegistrationId = [];
+
+            $registrationIds = array_values(array_unique(array_filter(array_map(function($entity) {
+                return $entity['id'] ?? null;
+            }, $result))));
+
+            if ($registrationIds) {
+                $conn = $app->em->getConnection();
+
+                $registrations = $conn->executeQuery("
+                    SELECT id, agent_id, agents_data
+                    FROM registration
+                    WHERE id IN (:registration_ids)
+                ", [
+                    'registration_ids' => $registrationIds,
+                ], [
+                    'registration_ids' => \Doctrine\DBAL\ArrayParameterType::INTEGER,
+                ])->fetchAllAssociative();
+
+                foreach ($registrations as $registration) {
+                    $registrationId = $registration['id'] ?? null;
+                    if (!$registrationId) {
+                        continue;
+                    }
+
+                    if ($ownerId = $registration['agent_id'] ?? null) {
+                        $ownerUrlByRegistrationId[$registrationId] = $app->createUrl('agent', 'single', [$ownerId]);
+                    }
+
+                    $agentsData = $registration['agents_data'] ?? [];
+                    if (is_string($agentsData)) {
+                        $agentsData = json_decode($agentsData, true) ?: [];
+                    }
+                    if (!is_array($agentsData)) {
+                        $agentsData = [];
+                    }
+
+                    if ($collective = $agentsData['coletivo'] ?? null) {
+                        if ($collectiveId = $collective['id'] ?? null) {
+                            $collectiveIdByRegistrationId[$registrationId] = $collectiveId;
+                            $collectiveUrlByRegistrationId[$registrationId] = $app->createUrl('agent', 'single', [$collectiveId]);
+                        }
+                    }
+                }
+
+                $collectiveIds = array_values(array_unique(array_filter(array_values($collectiveIdByRegistrationId))));
+
+                if ($collectiveIds) {
+                    $sealRelations = $conn->executeQuery("
+                        SELECT object_id, seal_id
+                        FROM seal_relation
+                        WHERE object_type = :object_type
+                          AND object_id IN (:collective_ids)
+                    ", [
+                        'object_type' => Agent::class,
+                        'collective_ids' => $collectiveIds,
+                    ], [
+                        'collective_ids' => \Doctrine\DBAL\ArrayParameterType::INTEGER,
+                    ])->fetchAllAssociative();
+
+                    $sealIds = [];
+                    foreach ($sealRelations as $relation) {
+                        $sealId = $relation['seal_id'] ?? null;
+
+                        if ($sealId !== null && $sealId != ($verificationSeals['ponto'] ?? null) && $sealId != ($verificationSeals['pontao'] ?? null)) {
+                            $sealIds[] = $sealId;
+                        }
+                    }
+
+                    $sealIds = array_values(array_unique(array_filter($sealIds)));
+                    $sealNamesById = [];
+
+                    if ($sealIds) {
+                        $seals = $conn->executeQuery("
+                            SELECT id, name
+                            FROM seal
+                            WHERE id IN (:seal_ids)
+                        ", [
+                            'seal_ids' => $sealIds,
+                        ], [
+                            'seal_ids' => \Doctrine\DBAL\ArrayParameterType::INTEGER,
+                        ])->fetchAllAssociative();
+
+                        foreach ($seals as $seal) {
+                            if (isset($seal['id'])) {
+                                $sealNamesById[$seal['id']] = $seal['name'] ?? '';
+                            }
+                        }
+                    }
+
+                    foreach ($sealRelations as $relation) {
+                        $collectiveId = $relation['object_id'] ?? null;
+                        $sealId = $relation['seal_id'] ?? null;
+
+                        if ($collectiveId !== null && $sealId !== null && $sealId != ($verificationSeals['ponto'] ?? null) && $sealId != ($verificationSeals['pontao'] ?? null)) {
+                            $otherSealsByCollectiveId[$collectiveId][] = $sealNamesById[$sealId] ?? '';
+                        }
+                    }
+
+                    foreach ($collectiveIdByRegistrationId as $registrationId => $collectiveId) {
+                        if (isset($otherSealsByCollectiveId[$collectiveId])) {
+                            $otherSealsByRegistrationId[$registrationId] = implode(', ', $otherSealsByCollectiveId[$collectiveId]);
+                        }
+                    }
+                }
+            }
+
             foreach($result as &$entity){
 
                 //Remoção das coluna no envio da planilha
@@ -2401,90 +2573,52 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     unset($entity['editableUntil']);
                 }
 
-                if (!empty($entity[$legalRepKey])) {
-                    $field_legalRepresentative = $legalRepKey;
-                    $field_addLegalRepresentative = $app->config['rcv.addLegalRepresentative'];
-                    if(isset($entity[$field_legalRepresentative]) && $entity[$field_legalRepresentative]){
-                        $entity['legalRep'] = $entity[$field_addLegalRepresentative] ?? null;
+                if ($legalRepKey && !empty($entity[$legalRepKey])) {
+                    if(isset($entity[$legalRepKey]) && $entity[$legalRepKey]){
+                        $entity['legalRep'] = $fieldAddLegalRepresentative ? ($entity[$fieldAddLegalRepresentative] ?? null) : null;
                     }
                 }
 
                 //Adiciona outros selos na exportação da planilha
-                $conn = $app->em->getConnection();
-                $query = $conn->fetchAll("
-                    SELECT 
-                        *
-                    FROM 
-                        registration
-                    WHERE 
-                        id = :id
-                ", [
-                    'id' => $entity['id']
-                ]);
-
-                $registration = $query[0] ?? null;
-
-                if($registration) {
-                    $agents_data = json_decode($registration['agents_data'], true);
-
-                    if($owner_id = $registration['owner']['id'] ?? null) {
-                        $entity['ownerID'] = $app->createUrl('agent', 'single', [$owner_id]);
+                $registrationId = $entity['id'] ?? null;
+                if ($registrationId !== null) {
+                    if (isset($ownerUrlByRegistrationId[$registrationId])) {
+                        $entity['ownerID'] = $ownerUrlByRegistrationId[$registrationId];
                     }
 
-                    if($collective = $agents_data['coletivo'] ?? null) {
-                        $entity['idPonto'] = $app->createUrl('agent', 'single', [$collective['id']]);
-
-                        $collective_seals = $conn->fetchAll("
-                            SELECT 
-                                *
-                            FROM 
-                                seal_relation
-                            WHERE 
-                                object_type = 'MapasCulturais\Entities\Agent'
-                                AND
-                                    object_id = :id
-                        ", [
-                            'id' => $collective['id']
-                        ]);
-
-                        foreach($collective_seals as $relation) {
-                            $seal_id = $relation['seal_id'] ?? null;
-
-                            if ($seal_id !== null && $seal_id != $verificationSeals['ponto'] && $seal_id != $verificationSeals['pontao']) {
-                                $seal = $conn->fetchAll("
-                                    SELECT 
-                                        *
-                                    FROM 
-                                        seal
-                                    WHERE 
-                                        id = :id
-                                ", [
-                                    'id' => $seal_id
-                                ]);
-                                $seal = $seal[0] ?? null;
-                                $_result[] = $seal['name'] ?? '';
-                            }
-                        }
+                    if (isset($collectiveUrlByRegistrationId[$registrationId])) {
+                        $entity['idPonto'] = $collectiveUrlByRegistrationId[$registrationId];
                     }
-                }
-                
-                if (isset($_result)) {
-                    $entity['outrosSelos'] = implode(', ', $_result);
+
+                    if (isset($otherSealsByRegistrationId[$registrationId])) {
+                        $entity['outrosSelos'] = $otherSealsByRegistrationId[$registrationId];
+                    }
                 }
 
                 // Adiciona os endereços na planilha
-                if (($entity[$app->config['rcv.organizationIsBrazil']] ?? '') === 'Sim') {
-                    $entity[$app->config['rcv.country']] = 'Brasil';
+                if ($organizationIsBrazilKey && (($entity[$organizationIsBrazilKey] ?? '') === 'Sim')) {
+                    if ($countryKey) {
+                        $entity[$countryKey] = 'Brasil';
+                    }
                 
-                    $addressSetKey = $app->config['rcv.addressSet'];
-                    $addressSet = $entity[$addressSetKey] ?? null;
+                    $addressSet = $addressSetKey ? ($entity[$addressSetKey] ?? null) : null;
                 
                     if (is_array($addressSet)) {
-                        $entity[$app->config['rcv.postalCode']]     = $addressSet['En_CEP']            ?? null;
-                        $entity[$app->config['rcv.state']]          = $addressSet['En_Estado']         ?? null;
-                        $entity[$app->config['rcv.publicPlace']]    = $addressSet['En_Nome_Logradouro']?? null;
-                        $entity[$app->config['rcv.addressNumber']]  = $addressSet['En_Num']            ?? null;
-                        $entity[$app->config['rcv.cityOfAddress']]  = $addressSet['En_Municipio']      ?? null;
+                        if ($postalCodeKey) {
+                            $entity[$postalCodeKey] = $addressSet['En_CEP'] ?? null;
+                        }
+                        if ($stateKey) {
+                            $entity[$stateKey] = $addressSet['En_Estado'] ?? null;
+                        }
+                        if ($publicPlaceKey) {
+                            $entity[$publicPlaceKey] = $addressSet['En_Nome_Logradouro'] ?? null;
+                        }
+                        if ($addressNumberKey) {
+                            $entity[$addressNumberKey] = $addressSet['En_Num'] ?? null;
+                        }
+                        if ($cityOfAddressKey) {
+                            $entity[$cityOfAddressKey] = $addressSet['En_Municipio'] ?? null;
+                        }
                     }
                 }
 
@@ -2500,16 +2634,22 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     $entity['horaAtualizacao'] = $timeOnly;
                 }
 
-                $ponto_cultura = $entity[$app->config['rcv.nameCulturePoint']] ?? null;
-                $ponto_coletivo = $entity[$app->config['rcv.namePontoColletivo']] ?? null;
-                $pontao_de_cultura = $entity[$app->config['rcv.nomePontaoDeCultura']] ?? null;
-                $valorFinal =$ponto_cultura ?:  $ponto_coletivo ?: $pontao_de_cultura;
+                $ponto_cultura = $nameCulturePointKey ? ($entity[$nameCulturePointKey] ?? null) : null;
+                $ponto_coletivo = $namePontoColletivoKey ? ($entity[$namePontoColletivoKey] ?? null) : null;
+                $pontao_de_cultura = $nomePontaoDeCulturaKey ? ($entity[$nomePontaoDeCulturaKey] ?? null) : null;
+                $valorFinal = $ponto_cultura ?: $ponto_coletivo ?: $pontao_de_cultura;
         
-                $entity[$app->config['rcv.nameCulturePoint']] = $valorFinal;
+                if ($nameCulturePointKey) {
+                    $entity[$nameCulturePointKey] = $valorFinal;
+                }
         
                 // Remove os outros campos
-                unset($entity[$app->config['rcv.namePontoColletivo']]);
-                unset($entity[$app->config['rcv.nomePontaoDeCultura']]);
+                if ($namePontoColletivoKey) {
+                    unset($entity[$namePontoColletivoKey]);
+                }
+                if ($nomePontaoDeCulturaKey) {
+                    unset($entity[$nomePontaoDeCulturaKey]);
+                }
             }
         });
 
