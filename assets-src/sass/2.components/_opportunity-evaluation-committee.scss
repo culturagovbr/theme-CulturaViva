@@ -1,0 +1,15 @@
+@use '../0.settings/mixins' as *;
+
+.opportunity-evaluation-committee {
+
+    // O template deste tema é anterior ao wrapper __card-header-content-data,
+    // então __card-status é filho direto de __card-header-content, que é
+    // flex-direction: column. As restrições de tamanho do BaseV2 pressupõem
+    // o layout em linha e, na coluna, o flex-basis de 420px vira altura
+    // (vão vazio no card) e o max-width de 560px quebra os selos de status.
+    &__card-header-content > .opportunity-evaluation-committee__card-status {
+        flex: 0 0 auto;
+        min-width: 0;
+        max-width: none;
+    }
+}
