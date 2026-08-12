@@ -2383,6 +2383,82 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        // Usa o título da pergunta nas colunas que saem com o metakey como rótulo
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:after', function($job, &$result) use($app) {
+            foreach ($result as $key => $label) {
+                if (!is_string($key) || $label !== $key) {
+                    continue;
+                }
+
+                $definition = $app->getRegisteredMetadataByMetakey($key, Registration::class);
+                $field = $definition->config['registrationFieldConfiguration'] ?? null;
+
+                if (!$field) {
+                    continue;
+                }
+
+                // Localização e links já têm colunas próprias (UF/Município/Links)
+                $entity_type_field = $this->is_entity_type_field($key);
+
+                if (($entity_type_field['status'] ?? false) && in_array($entity_type_field['ft'] ?? null, ['@location', '@links'], true)) {
+                    unset($result[$key]);
+                    continue;
+                }
+
+                if ($title = trim((string) $field->title)) {
+                    $result[$key] = $title;
+                }
+            }
+        });
+
+        // Ordena as colunas das perguntas na ordem do formulário (fase, etapa e campo)
+        $app->hook('SpreadsheetJob(registrations-spreadsheets).getHeader:after', function($job, &$result) use($app) {
+            $phase_order = [];
+            $phase = $job->owner;
+
+            do {
+                $phase_order[$phase->id] = count($phase_order);
+            } while ($phase = $phase->previousPhase);
+
+            $fields = [];
+            foreach (array_keys($result) as $key) {
+                $definition = $app->getRegisteredMetadataByMetakey($key, Registration::class);
+
+                if ($field = $definition->config['registrationFieldConfiguration'] ?? null) {
+                    $fields[$key] = $field;
+                }
+            }
+
+            if (count($fields) < 2) {
+                return;
+            }
+
+            $sorted_keys = array_keys($fields);
+            usort($sorted_keys, function($a, $b) use($fields, $phase_order) {
+                $field_a = $fields[$a];
+                $field_b = $fields[$b];
+
+                return ($phase_order[$field_a->owner->id] ?? PHP_INT_MAX) <=> ($phase_order[$field_b->owner->id] ?? PHP_INT_MAX)
+                    ?: ($field_a->step ? $field_a->step->displayOrder : PHP_INT_MAX) <=> ($field_b->step ? $field_b->step->displayOrder : PHP_INT_MAX)
+                    ?: $field_a->displayOrder <=> $field_b->displayOrder
+                    ?: $field_a->id <=> $field_b->id;
+            });
+
+            $ordered = [];
+            $position = 0;
+
+            foreach ($result as $key => $label) {
+                if (isset($fields[$key])) {
+                    $sorted_key = $sorted_keys[$position++];
+                    $ordered[$sorted_key] = $result[$sorted_key];
+                } else {
+                    $ordered[$key] = $label;
+                }
+            }
+
+            $result = $ordered;
+        });
+
         $app->hook('SpreadsheetJob(registrations-spreadsheets).getBatch:after', function($job, &$result) use($app, $theme) {
 
             $verificationSeals = $app->config['rcv.verificationSeals'] ?? null;
