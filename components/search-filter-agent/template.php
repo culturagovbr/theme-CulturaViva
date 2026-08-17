@@ -37,7 +37,7 @@ $this->import('
         <div class="field">
             <label> <?php i::_e('Área de atuação') ?></label>
             <mc-multiselect :model="pseudoQuery['term:area']" placeholder="<?php i::_e('Selecione as áreas de atuação') ?>" :items="terms" hide-filter hide-button></mc-multiselect>
-            <mc-tag-list editable :tags="pseudoQuery['term:area']" classes="agent__background agent__color"></mc-tag-list>
+            <mc-tag-list editable :tags="pseudoQuery['term:area']" :labels="terms" classes="agent__background agent__color"></mc-tag-list>
         </div>
 
         <rcv-structuring-actions v-model:model-actions="pseudoQuery['term:acao_estruturante']" v-model:model-other-actions="pseudoQuery['term:acao_estruturante_outra']"></rcv-structuring-actions>

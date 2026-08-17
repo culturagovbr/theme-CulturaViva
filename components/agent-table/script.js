@@ -80,7 +80,6 @@ app.component('agent-table', {
 
         return {
             mergedHeaders,
-            terms: $TAXONOMIES.area.terms,
             types: $DESCRIPTIONS.agent.type.options,
             state: $DESCRIPTIONS.agent.En_Estado.optionsOrder,
             initialQuery,
@@ -103,6 +102,11 @@ app.component('agent-table', {
         verificationSeals() {
             return $MAPAS.config.agentTable.verificationSeals
         },
+
+        terms() {
+            return $RCV.taxonomyFilterItems('area');
+        },
+
         filtersDictComplement() {
             return {
                 'type': "agent",
@@ -314,6 +318,26 @@ app.component('agent-table', {
 
                     if (this.selectedCities.length > 0) {
                         this.query[filter.prop] = `IN(${this.selectedCities.toString()})`;
+                    } else {
+                        delete this.query[filter.prop];
+                    }
+
+                    break;
+                case 'term:acao_estruturante':
+                    this.selectedStructuringActions = this.selectedStructuringActions.filter(action => action !== filter.value);
+
+                    if (this.selectedStructuringActions.length > 0) {
+                        this.query[filter.prop] = `IN(${this.selectedStructuringActions.toString()})`;
+                    } else {
+                        delete this.query[filter.prop];
+                    }
+
+                    break;
+                case 'term:acao_estruturante_outra':
+                    this.selectedOtherStructuringActions = this.selectedOtherStructuringActions.filter(action => action !== filter.value);
+
+                    if (this.selectedOtherStructuringActions.length > 0) {
+                        this.query[filter.prop] = `IN(${this.selectedOtherStructuringActions.toString()})`;
                     } else {
                         delete this.query[filter.prop];
                     }

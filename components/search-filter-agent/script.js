@@ -23,9 +23,13 @@ app.component('search-filter-agent', {
     },
 
     data() {
-        return {
-            terms: $TAXONOMIES.area.terms,
-        }
+        return {}
+    },
+
+    computed: {
+        terms() {
+            return $RCV.taxonomyFilterItems('area');
+        },
     },
 
     methods: {

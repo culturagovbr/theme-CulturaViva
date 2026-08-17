@@ -47,6 +47,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->enqueueScript('app-v2', 'rybena', $app->config['rybena.script']);
         }
 
+        $this->enqueueScript('app-v2', 'rcv-utils', 'js/rcv-utils.js');
+
         EvaluationDistribution::register();
 
         $self = $this;

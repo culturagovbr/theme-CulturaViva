@@ -55,13 +55,11 @@ app.component('rcv-countries', {
 
     computed: {
         countries() {
-            let countries = {};
-            for (let country of $MAPAS.config.countries.paises) {
-                if (country.value) {
-                    countries[country.value] = country.value;
-                }
-            }
-            return countries;
+            const values = $MAPAS.config.countries.paises
+                .filter(country => country.value)
+                .map(country => country.value);
+
+            return $RCV.filterItems(values);
         },
     },
 });
