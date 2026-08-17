@@ -84,11 +84,11 @@ app.component('rcv-structuring-actions', {
 
     computed: {
         actions() {
-            return $TAXONOMIES.acao_estruturante.terms;
+            return $RCV.taxonomyFilterItems('acao_estruturante');
         },
 
         otherActions() {
-            return $TAXONOMIES.acao_estruturante_outra.terms;
+            return $RCV.taxonomyFilterItems('acao_estruturante_outra');
         }
     },
 });

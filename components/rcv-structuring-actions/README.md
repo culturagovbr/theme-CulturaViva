@@ -9,6 +9,9 @@ Componente para seleção das ações estruturantes no tema do RCV. Utilizado no
 - *Array **modelActions*** - Ações estruturantes
 - *Array **modelActions*** - Outras ações estruturantes
 
+> Os valores vêm com as vírgulas escapadas (`$RCV.taxonomyFilterItems`). Para exibir o rótulo, use os
+> dicionários `actions` / `otherActions` como `labels`.
+
 ### Importando componente
 ```PHP
 <?php 
