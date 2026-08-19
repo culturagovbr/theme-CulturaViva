@@ -3,18 +3,19 @@
 namespace CulturaViva;
 
 use MapasCulturais\App;
+use MapasCulturais\Entities\EvaluationMethodConfiguration;
+use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
 use MapasCulturais\Entities\Opportunity;
+use MapasCulturais\Entities\RegistrationEvaluation;
 use MapasCulturais\Entities\User;
+use Opportunities\Jobs\RedistributeCommitteeRegistrations;
 
 final class EvaluationDistribution
 {
     public static function register(): void
     {
         $app = App::i();
-        $opportunity_ids = array_map('intval', [
-            $app->config['rcv.opportunityId'],
-            $app->config['rcv.pnabOpportunityId'],
-        ]);
+        $opportunity_ids = self::configuredOpportunityIds();
 
         $app->hook('evaluationMethod.distributionComparator', function (&$comparator, Opportunity $opportunity) use ($app, $opportunity_ids) {
             $first_phase = $opportunity->firstPhase ?: $opportunity;
@@ -37,6 +38,126 @@ final class EvaluationDistribution
                 $opportunity->id
             ));
         });
+
+        // libera as iniciadas dos desabilitados antes de cada redistribuição
+        $app->hook('job(' . RedistributeCommitteeRegistrations::SLUG . ').execute:before', function () {
+            /** @var \MapasCulturais\Entities\Job $this */
+            self::releasePhaseEvaluations($this->evaluationMethodConfiguration ?? null);
+        });
+
+        // ao desabilitar, libera as iniciadas e redistribui as pendentes
+        $app->hook('entity(EvaluationMethodConfigurationAgentRelation).disable:after', function () use ($app, $opportunity_ids) {
+            /** @var EvaluationMethodConfigurationAgentRelation $this */
+            $evaluation_config = $this->owner;
+
+            if ($this->__skipRedistribution || !self::isCulturaVivaPhase($evaluation_config, $opportunity_ids)) {
+                return;
+            }
+
+            self::releaseValuerEvaluations($this);
+
+            $app->enqueueOrReplaceJob(RedistributeCommitteeRegistrations::SLUG, [
+                'evaluationMethodConfiguration' => $evaluation_config,
+            ], 'now');
+        });
+    }
+
+    public static function releasePhaseEvaluations(?EvaluationMethodConfiguration $evaluation_config): int
+    {
+        if (!$evaluation_config || !self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        $released = 0;
+
+        foreach ($evaluation_config->getAgentRelations() as $relation) {
+            $released += self::releaseValuerEvaluations($relation);
+        }
+
+        return $released;
+    }
+
+    public static function releaseValuerEvaluations(?EvaluationMethodConfigurationAgentRelation $relation): int
+    {
+        if (!$relation || $relation->status != EvaluationMethodConfigurationAgentRelation::STATUS_DISABLED) {
+            return 0;
+        }
+
+        $evaluation_config = $relation->owner;
+
+        if (!self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        $user = $relation->agent->user ?? null;
+
+        if (!$user) {
+            return 0;
+        }
+
+        $app = App::i();
+        $evaluations = $app->repo('RegistrationEvaluation')->findByOpportunityAndUser(
+            $evaluation_config->opportunity,
+            $user,
+            $relation->group
+        );
+
+        $released = 0;
+
+        $app->disableAccessControl();
+        try {
+            foreach ($evaluations as $evaluation) {
+                // só rascunho volta para a fila; concluída e enviada permanecem
+                if ($evaluation->status != RegistrationEvaluation::STATUS_DRAFT) {
+                    continue;
+                }
+
+                $evaluation->delete(true);
+                $released++;
+            }
+        } finally {
+            $app->enableAccessControl();
+        }
+
+        $relation->updateSummary();
+
+        if ($released > 0) {
+            $app->log->debug(sprintf(
+                'CulturaViva: %d avaliacoes iniciadas liberadas do avaliador %d na fase %d',
+                $released,
+                $user->id,
+                $evaluation_config->opportunity->id
+            ));
+        }
+
+        return $released;
+    }
+
+    public static function configuredOpportunityIds(): array
+    {
+        $app = App::i();
+
+        return array_map('intval', [
+            $app->config['rcv.opportunityId'],
+            $app->config['rcv.pnabOpportunityId'],
+        ]);
+    }
+
+    public static function isCulturaVivaPhase(?EvaluationMethodConfiguration $evaluation_config, array $opportunity_ids): bool
+    {
+        if (!$evaluation_config || !$evaluation_config->opportunity) {
+            return false;
+        }
+
+        $opportunity = $evaluation_config->opportunity;
+        $first_phase = $opportunity->firstPhase ?: $opportunity;
+
+        return self::isConfiguredPhase((int) $first_phase->id, $opportunity_ids);
+    }
+
+    public static function isConfiguredPhase(?int $first_phase_id, array $opportunity_ids): bool
+    {
+        return $first_phase_id !== null && in_array($first_phase_id, $opportunity_ids, true);
     }
 
     public static function supportsUniformDistribution(
