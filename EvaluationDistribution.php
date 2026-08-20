@@ -102,6 +102,11 @@ final class EvaluationDistribution
             return 0;
         }
 
+        // o mesmo usuário pode ter outra relação, habilitada, na mesma comissão
+        if (self::hasEnabledRelation($evaluation_config, $relation, $user)) {
+            return 0;
+        }
+
         $app = App::i();
         $evaluations = $app->repo('RegistrationEvaluation')->findByOpportunityAndUser(
             $evaluation_config->opportunity,
@@ -142,6 +147,25 @@ final class EvaluationDistribution
         }
 
         return $released;
+    }
+
+    private static function hasEnabledRelation(
+        EvaluationMethodConfiguration $evaluation_config,
+        EvaluationMethodConfigurationAgentRelation $relation,
+        User $user
+    ): bool {
+        foreach ($evaluation_config->getAgentRelations() as $other) {
+            if ($other->id == $relation->id || $other->group !== $relation->group) {
+                continue;
+            }
+
+            if ($other->status == EvaluationMethodConfigurationAgentRelation::STATUS_ENABLED
+                && ($other->agent->user->id ?? null) == $user->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function backgroundRequest(): Request
