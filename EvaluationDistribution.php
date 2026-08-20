@@ -8,7 +8,9 @@ use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
 use MapasCulturais\Entities\Opportunity;
 use MapasCulturais\Entities\RegistrationEvaluation;
 use MapasCulturais\Entities\User;
+use MapasCulturais\Request;
 use Opportunities\Jobs\RedistributeCommitteeRegistrations;
+use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class EvaluationDistribution
 {
@@ -51,6 +53,11 @@ final class EvaluationDistribution
             $evaluation_config = $this->owner;
 
             if ($this->__skipRedistribution || !self::isCulturaVivaPhase($evaluation_config, $opportunity_ids)) {
+                return;
+            }
+
+            // com a distribuição desligada, liberar a vaga não levaria a lugar nenhum
+            if (($evaluation_config->distributionConfiguration ?? 'deactivate') == 'deactivate') {
                 return;
             }
 
@@ -103,8 +110,11 @@ final class EvaluationDistribution
         );
 
         $released = 0;
+        $http_request = $app->request;
 
         $app->disableAccessControl();
+        // em job não há requisição, e os listeners de remove:after contam com uma
+        $app->request = $http_request ?: self::backgroundRequest();
         try {
             foreach ($evaluations as $evaluation) {
                 // só rascunho volta para a fila; concluída e enviada permanecem
@@ -116,6 +126,7 @@ final class EvaluationDistribution
                 $released++;
             }
         } finally {
+            $app->request = $http_request;
             $app->enableAccessControl();
         }
 
@@ -131,6 +142,14 @@ final class EvaluationDistribution
         }
 
         return $released;
+    }
+
+    private static function backgroundRequest(): Request
+    {
+        // sem IP: a ação é do sistema, não de um usuário
+        $psr7 = (new ServerRequestFactory())->createServerRequest('GET', '/');
+
+        return new Request($psr7, 'job', RedistributeCommitteeRegistrations::SLUG, []);
     }
 
     public static function configuredOpportunityIds(): array

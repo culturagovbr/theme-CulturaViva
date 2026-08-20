@@ -75,7 +75,7 @@ class EvaluationDistributionTest extends TestCase
         $this->assertFalse(EvaluationDistribution::isCulturaVivaPhase(null, [5386, 5388]));
     }
 
-    function testReleaseRefusesWithoutAnEvaluationConfiguration(): void
+    function testReleaseRefusesWithoutARelation(): void
     {
         $this->assertSame(0, EvaluationDistribution::releasePhaseEvaluations(null));
         $this->assertSame(0, EvaluationDistribution::releaseValuerEvaluations(null));
