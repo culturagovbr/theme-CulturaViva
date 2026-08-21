@@ -15,6 +15,7 @@ use MapasCulturais\Exceptions\NotFound;
 use MapasCulturais\Entities\Opportunity;
 use MapasCulturais\Entities\Registration;
 use MapasCulturais\Entities\AgentRelation;
+use MapasCulturais\Entities\AgentSealRelation;
 use MapasCulturais\Entities\RegistrationEvaluation;
 use MapasCulturais\Entities\RegistrationSpaceRelation;
 use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
@@ -245,14 +246,36 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         });
 
 
-        $app->hook('ApiQuery(Agent).params', function (&$api_params) use($seals, $theme, $app) {
+        // o tipo de ponto vem do selo; o metadado tipoPonto acumula tudo que já foi declarado
+        $point_types = PointType::SLUGS;
+        $point_type_filters = new \WeakMap();
+
+        // o @verified do core entra como join e multiplica a linha do agente por selo
+        $verified_filters = new \WeakMap();
+
+        $app->hook('ApiQuery(Agent).params', function (&$api_params) use($seals, $theme, $app, $point_types, &$point_type_filters, &$verified_filters) {
             /** @var ApiQuery $this */
-            
+
             if($app->config['rcv.disableApiFilters'] || $this->parentQuery) {
                 return;
             }
             if (!isset($api_params['type']) && !isset($api_params['id']) && !isset($api_params['parent']) && !isset($api_params['owner']) && !isset($api_params['user'])) {
                 $api_params['type'] = API::EQ(2);
+            }
+
+            if (isset($api_params['tipoPonto']) && preg_match('#^I?IN\((.*)\)$#i', trim($api_params['tipoPonto']), $matches)) {
+                $types = array_filter(array_map('trim', explode(',', $matches[1])));
+
+                // valor não previsto mantém o filtro original por metadado
+                if ($types && !array_diff($types, $point_types)) {
+                    $point_type_filters[$this] = $types;
+                    unset($api_params['tipoPonto']);
+                }
+            }
+
+            if (array_key_exists('@verified', $api_params)) {
+                $verified_filters[$this] = true;
+                unset($api_params['@verified']);
             }
         });
 
@@ -270,30 +293,29 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 LEFT JOIN e.__metadata {$alias} 
                     WITH {$alias}.key = 'rcv_tipo'";
             
-            if(!$theme->canUserControlRCV()) {
-                $joins .= "
-                    LEFT JOIN e.__sealRelations rcv_sealRelations
-                    LEFT JOIN rcv_sealRelations.seal rcv_seal WITH rcv_seal.id IN ($seals)";
-            }
+            // a exigência de selo é aplicada por EXISTS no where
 
             if($app->auth->isUserAuthenticated() && !$app->user->is('admin')) {
                 $joins .= " LEFT JOIN e.__permissionsCache rcv_pcache_agent WITH rcv_pcache_agent.action = '@control'";
             }
         });
 
-        $app->hook('ApiQuery(Agent).where', function (&$where) use($theme, $app) {
+        $app->hook('ApiQuery(Agent).where', function (&$where) use($seals, $theme, $app, &$point_type_filters, &$verified_filters) {
             /** @var ApiQuery $this */
 
             if($app->config['rcv.disableApiFilters'] || $this->parentQuery) {
                 return;
             }
 
-            $alias = "rcv_tipo_" . spl_object_id($this);
+            $uid = spl_object_id($this);
+            $alias = "rcv_tipo_" . $uid;
 
             $_where = "((e._type = 2 AND {$alias}.value = 'ponto') OR e._type = 1)";
 
             if(!$theme->canUserControlRCV()) {
-                $_where .= " AND ((e._type = 2 AND rcv_seal.id IS NOT NULL) OR e._type = 1)";
+                $has_rcv_seal = $theme->sealRelationExistsDql("rcv_seal_{$uid}", explode(',', $seals));
+
+                $_where .= " AND ((e._type = 2 AND {$has_rcv_seal}) OR e._type = 1)";
             }
 
             if($app->auth->isUserAuthenticated()) {
@@ -305,6 +327,31 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
 
             $where .= " AND ({$_where})";
+
+            if(($verified_filters[$this] ?? false) && ($verified_seals = (array) ($app->config['app.verifiedSealsIds'] ?? []))) {
+                $where .= ' AND ' . $theme->sealRelationExistsDql("rcv_verificado_{$uid}", $verified_seals);
+            }
+
+            if($types = $point_type_filters[$this] ?? null) {
+                $verification_seals = $app->config['rcv.verificationSeals'];
+                $conditions = [];
+
+                foreach($types as $type) {
+                    $type_alias = "rcv_ft_{$type}_{$uid}";
+                    $has_ponto = $theme->sealRelationExistsDql("{$type_alias}_selo", [$verification_seals['ponto'] ?? 0], true);
+                    $is_entity = $theme->pointEntityExistsDql($type_alias);
+
+                    $conditions[] = match($type) {
+                        PointType::PONTAO => $theme->sealRelationExistsDql("{$type_alias}_selo", [$verification_seals['pontao'] ?? 0], true),
+                        PointType::ENTIDADE => "{$has_ponto} AND {$is_entity}",
+                        PointType::COLETIVO => "{$has_ponto} AND NOT {$is_entity}",
+                    };
+                }
+
+                $conditions = array_map(fn($condition) => "({$condition})", $conditions);
+
+                $where .= ' AND (' . implode(' OR ', $conditions) . ')';
+            }
         });
 
         $app->hook('ApiQuery(Space).params', function (&$api_params) use($seals, $theme, $app) {
@@ -1659,18 +1706,15 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                             $entity['location'] = (string) $agent->location;
                         }
                         
-                        if (isset($entity['tipoPonto'])) {
-                            $tipos = [];
+                        // o tipo exibido vem do selo
+                        if (array_key_exists('tipoPonto', $entity)) {
+                            $categories = $app->config['rcv.categoriesMap'];
+                            $tipos = array_map(
+                                fn($type) => $categories[PointType::categoryKey($type)],
+                                $theme->pointTypes($agent)
+                            );
 
-                            if(is_array($entity['tipoPonto'])) {
-                                foreach ($entity['tipoPonto'] as $tipo) {
-                                    $tipo_ponto = str_replace('_', '-', $tipo);
-                                    
-                                    $tipos[] = $app->config['rcv.categoriesMap'][$tipo_ponto];
-                                }
-    
-                                $entity['tipoPonto'] = implode(', ', $tipos);
-                            }
+                            $entity['tipoPonto'] = implode(', ', $tipos);
                         }
 
                         $entity['ownerName'] = $agent->owner->user->profile->name;
@@ -2980,6 +3024,52 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
     function canUserControlRCV() {
         return $this->opportunity->canUser('@control');
+    }
+
+    /**
+     * Organização é entidade quando tem CNPJ; sem CNPJ, a declaração do cadastro desempata
+     * @param Agent $agent
+     * @return bool
+     */
+    function isPointEntity(Agent $agent): bool {
+        return PointType::isEntity(trim((string) $agent->cnpj) !== '', $agent->tipoPonto);
+    }
+
+    function pointTypes(Agent $agent): array {
+        $seal_ids = array_map(fn($relation) => (int) $relation->seal->id, $agent->sealRelations);
+
+        return PointType::resolve(
+            $seal_ids,
+            trim((string) $agent->cnpj) !== '',
+            $agent->tipoPonto,
+            App::i()->config['rcv.verificationSeals']
+        );
+    }
+
+    function sealRelationExistsDql(string $alias, array $seal_ids, bool $only_active = false): string {
+        $seal_ids = array_filter(array_map('intval', $seal_ids));
+
+        // sem selos na lista, devolve condição que nunca casa
+        if (!$seal_ids) {
+            return '1 = 0';
+        }
+
+        $status = $only_active ? " AND {$alias}.status = 1" : '';
+
+        return "EXISTS (SELECT 1 FROM " . AgentSealRelation::class . " {$alias}
+            WHERE {$alias}.owner = e AND {$alias}.seal IN (" . implode(',', $seal_ids) . "){$status})";
+    }
+
+    // organização é entidade quando tem CNPJ ou, na falta dele, se declarou entidade
+    function pointEntityExistsDql(string $alias): string {
+        $meta = AgentMeta::class;
+
+        return "(EXISTS (SELECT 1 FROM {$meta} {$alias}_cnpj
+                WHERE {$alias}_cnpj.owner = e AND {$alias}_cnpj.key = 'cnpj'
+                    AND TRIM({$alias}_cnpj.value) <> '')
+            OR EXISTS (SELECT 1 FROM {$meta} {$alias}_tipo
+                WHERE {$alias}_tipo.owner = e AND {$alias}_tipo.key = 'tipoPonto'
+                    AND JSONB_CONTAINS(CAST({$alias}_tipo.value AS JSONB), '\"" . PointType::ENTIDADE . "\"') = true))";
     }
 
     function createSpaceRelation(Space $space, Registration $registration): RegistrationSpaceRelation {

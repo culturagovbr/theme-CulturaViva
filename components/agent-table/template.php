@@ -73,16 +73,7 @@ $this->import('
         </template>
 
         <template #tipoPonto="{ entity }">
-        {{
-            (Array.isArray(entity.tipoPonto) ? entity.tipoPonto : [entity.tipoPonto])
-            .map(tipo =>
-                tipo === 'ponto_entidade' ? 'Ponto de Cultura (entidade com CNPJ)' :
-                tipo === 'pontao' ? 'Pontão de Cultura (entidade com CNPJ)' :
-                tipo === 'ponto_coletivo' ? 'Ponto de Cultura (coletivo sem CNPJ)' :
-                tipo
-            )
-            .join(', ')
-        }}
+            {{ pointTypes(entity) }}
         </template>
 
         <template #cepPontaPontao="{entity}">
