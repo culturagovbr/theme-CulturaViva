@@ -1613,16 +1613,23 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
+            // As colunas da tabela usam expressões javascript que não são válidas no @select da ApiQuery
             $query['@select'] = str_replace([
                 "terms['acao_estruturante'].join(', ')",
                 "terms['acao_estruturante_outra'].join(', ')",
                 "terms['rcv_principais_segmentos'].join(', ')",
                 "terms['rcv_atuacao_demais_segmentos'].join(', ')",
+                'parent?.cpf',
+                'parent?.name',
+                'seals[0]?.createTimestamp',
             ], [
                 'acao_estruturante',
                 'acao_estruturante_outra',
                 'rcv_principais_segmentos',
                 'rcv_atuacao_demais_segmentos',
+                'cpf',
+                'ownerName',
+                'seals',
             ], $query['@select']);
         };
 
@@ -1673,8 +1680,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                             }
                         }
 
-                        $entity['ownerName'] = $agent->owner->user->profile->name;
-                        $entity['cpf'] = $agent->owner->user->profile->cpf;
+                        $entity['ownerName'] = $agent->owner?->user?->profile?->name;
+                        $entity['cpf'] = $agent->owner?->user?->profile?->cpf;
 
                         if(array_key_exists('seals', $entity) && $agent->sealRelations && $agent->sealRelations[0]->createTimestamp) {
                             $entity['seals'] = $agent->sealRelations[0]->createTimestamp?->format('d/m/Y');
