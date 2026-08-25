@@ -2096,6 +2096,40 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        // Adiciona a data de envio no retorno da avaliação
+        $is_evaluations_list = fn() => $app->request
+            && $app->request->controllerId == 'opportunity'
+            && $app->request->action == 'findEvaluations';
+
+        $app->hook('ApiQuery(RegistrationEvaluation).params', function (&$api_params) use ($is_evaluations_list) {
+            if ($is_evaluations_list() && !empty($api_params['@select']) && !str_contains($api_params['@select'], 'sentTimestamp')) {
+                $api_params['@select'] .= ',sentTimestamp';
+            }
+        });
+
+        // Formata a data de envio da avaliação
+        $app->hook('ApiQuery(RegistrationEvaluation).findResult', function (&$result) use ($is_evaluations_list) {
+            if (!$is_evaluations_list()) {
+                return;
+            }
+
+            foreach ($result as &$evaluation) {
+                if (array_key_exists('sentTimestamp', $evaluation)) {
+                    $evaluation['sentTimestampString'] = $evaluation['sentTimestamp']?->format('d/m/Y H:i') ?? '';
+                }
+            }
+            unset($evaluation);
+        });
+
+        // Adiciona a coluna de data de envio na tabela de avaliações
+        $app->hook('component(opportunity-evaluations-table).additionalHeaders', function (&$defaultHeaders) {
+            $defaultHeaders[] = [
+                'text' => i::__('Data de envio da avaliação'),
+                'value' => 'evaluation?.sentTimestampString',
+                'slug' => 'evaluationSentTimestamp',
+            ];
+        });
+
         // Atualiza a data da ultima atualização cadastral no agente
         $app->hook("entity(Registration).<<send|save>>:after", function () use ($app) {
             /** @var Registration $this */
