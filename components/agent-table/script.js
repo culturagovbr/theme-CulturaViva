@@ -148,6 +148,27 @@ app.component('agent-table', {
     },
     
     methods: {
+        // a coluna de tipo vem do selo de certificação, igual ao filtro e à planilha
+        pointTypes(entity) {
+            const seals = (entity.seals || []).map(seal => Number(seal.sealId));
+            const labels = this.filtersDictComplement;
+            const result = [];
+
+            // ter CNPJ prova que é entidade; sem CNPJ, a declaração do cadastro desempata
+            const declared = JSON.stringify(entity.tipoPonto || '');
+            const isEntity = !!(entity.cnpj || '').trim() || declared.includes('ponto_entidade');
+
+            if (seals.includes(Number(this.verificationSeals.pontao))) {
+                result.push(labels['pontao']);
+            }
+
+            if (seals.includes(Number(this.verificationSeals.ponto))) {
+                result.push(isEntity ? labels['ponto_entidade'] : labels['ponto_coletivo']);
+            }
+
+            return result.join(', ');
+        },
+
         othersSeals(entity) {
             let result = [];
             for(seal of entity.seals) {
