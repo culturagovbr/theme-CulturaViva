@@ -19,6 +19,7 @@ $this->import('
     mc-alert
     opportunity-evaluation-committee
     registration-distribution-rule
+    rcv-stale-evaluations-config
 ');
 
 ?>
@@ -175,8 +176,18 @@ $this->import('
         </div>
 
         <template v-else>
-            <div class="opportunity-committee-groups__distribution-config">
-                <entity-field :entity="entity" prop="distributionConfiguration":autosave="300"></entity-field>
+            <div class="opportunity-committee-groups__distribution-config grid-12">
+                <entity-field :entity="entity" prop="distributionConfiguration" :autosave="300" classes="col-12"></entity-field>
+
+                <rcv-stale-evaluations-config
+                    v-if="entity.distributionConfiguration"
+                    :entity="entity"
+                    enabled-prop="<?= \CulturaViva\EvaluationDistribution::META_STALE_ENABLED ?>"
+                    days-prop="<?= \CulturaViva\EvaluationDistribution::META_STALE_DAYS ?>"
+                    :min="<?= \CulturaViva\EvaluationDistribution::STALE_DAYS_MIN ?>"
+                    :max="<?= \CulturaViva\EvaluationDistribution::STALE_DAYS_MAX ?>"
+                    class="col-12"
+                ></rcv-stale-evaluations-config>
             </div>
 
             <div class="opportunity-committee-groups__distribution-actions">
