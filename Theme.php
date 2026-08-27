@@ -51,6 +51,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         $this->enqueueScript('app-v2', 'rcv-utils', 'js/rcv-utils.js');
 
         EvaluationDistribution::register();
+        CommitteeMembership::register();
 
         $self = $this;
 
