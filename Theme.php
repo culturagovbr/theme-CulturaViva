@@ -2977,40 +2977,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             'type' => 'array',
             'readonly' => true
         ]);
-
-        // depois que os plugins/módulos registram os tipos de configuração de avaliação
-        $app->hook('app.register', function () use ($app) {
-            $app->view->registerEvauationMethodConfigurationMetadata(EvaluationDistribution::META_DISABLED_ENABLED, [
-                'label' => i::__('Redistribuir avaliações iniciadas de avaliadores desabilitados'),
-                'type' => 'boolean',
-                'default' => true,
-            ]);
-
-            $app->view->registerEvauationMethodConfigurationMetadata(EvaluationDistribution::META_STALE_ENABLED, [
-                'label' => i::__('Redistribuir avaliações iniciadas paradas há dias'),
-                'type' => 'boolean',
-                'default' => false,
-            ]);
-
-            $stale_days_message = sprintf(
-                i::__('Informe uma quantidade de dias entre %d e %d.'),
-                EvaluationDistribution::STALE_DAYS_MIN,
-                EvaluationDistribution::STALE_DAYS_MAX
-            );
-
-            $app->view->registerEvauationMethodConfigurationMetadata(EvaluationDistribution::META_STALE_DAYS, [
-                'label' => i::__('Dias parado como iniciada para redistribuir a avaliação'),
-                'type' => 'integer',
-                'min' => EvaluationDistribution::STALE_DAYS_MIN,
-                'max' => EvaluationDistribution::STALE_DAYS_MAX,
-                // obrigatório quando a opção está marcada e ainda não há valor válido
-                'should_validate' => fn ($entity) => EvaluationDistribution::staleDaysRequired($entity) ? $stale_days_message : false,
-                // faixa 1..180 quando há valor preenchido e a opção está marcada
-                'validations' => [
-                    '\CulturaViva\EvaluationDistribution::isStaleDaysInRange($entity, $value)' => $stale_days_message,
-                ],
-            ]);
-        });
     }
 
     function getCNPJFake($cnpj) {

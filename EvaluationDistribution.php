@@ -3,6 +3,7 @@
 namespace CulturaViva;
 
 use MapasCulturais\App;
+use MapasCulturais\i;
 use MapasCulturais\Entities\EvaluationMethodConfiguration;
 use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
 use MapasCulturais\Entities\Opportunity;
@@ -31,6 +32,8 @@ final class EvaluationDistribution
     {
         $app = App::i();
         $opportunity_ids = self::configuredOpportunityIds();
+
+        self::registerMetadata();
 
         $app->hook('evaluationMethod.distributionComparator', function (&$comparator, Opportunity $opportunity) use ($app, $opportunity_ids) {
             $first_phase = $opportunity->firstPhase ?: $opportunity;
@@ -121,7 +124,43 @@ final class EvaluationDistribution
                 $this->$days_key = $days;
             }
         });
+    }
 
+    // registra os metadados de configuração da EMC
+    public static function registerMetadata(): void
+    {
+        $theme = App::i()->view;
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_DISABLED_ENABLED, [
+            'label' => i::__('Redistribuir avaliações iniciadas de avaliadores desabilitados'),
+            'type' => 'boolean',
+            'default' => true,
+        ]);
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_STALE_ENABLED, [
+            'label' => i::__('Redistribuir avaliações iniciadas paradas há dias'),
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
+        $days_message = sprintf(
+            i::__('Informe uma quantidade de dias entre %d e %d.'),
+            self::STALE_DAYS_MIN,
+            self::STALE_DAYS_MAX
+        );
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_STALE_DAYS, [
+            'label' => i::__('Dias parado como iniciada para redistribuir a avaliação'),
+            'type' => 'integer',
+            'min' => self::STALE_DAYS_MIN,
+            'max' => self::STALE_DAYS_MAX,
+            // obrigatório quando a opção está marcada e ainda não há valor válido
+            'should_validate' => fn ($entity) => self::staleDaysRequired($entity) ? $days_message : false,
+            // faixa 1..180 quando há valor preenchido e a opção está marcada
+            'validations' => [
+                '\CulturaViva\EvaluationDistribution::isStaleDaysInRange($entity, $value)' => $days_message,
+            ],
+        ]);
     }
 
     // a opção de redistribuir por tempo está valendo (marcada e com distribuição ativa)
