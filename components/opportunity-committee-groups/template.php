@@ -179,6 +179,16 @@ $this->import('
             <div class="opportunity-committee-groups__distribution-config grid-12">
                 <entity-field :entity="entity" prop="distributionConfiguration" :autosave="300" classes="col-12"></entity-field>
 
+                <entity-field
+                    v-if="entity.distributionConfiguration && entity.distributionConfiguration !== 'deactivate'"
+                    :entity="entity"
+                    prop="<?= \CulturaViva\EvaluationDistribution::META_DISABLED_ENABLED ?>"
+                    type="checkbox"
+                    :autosave="300"
+                    classes="col-12">
+                    <?= i::__('Redistribuir avaliações iniciadas de avaliadores desabilitados') ?>
+                </entity-field>
+
                 <rcv-stale-evaluations-config
                     v-if="entity.distributionConfiguration"
                     :entity="entity"

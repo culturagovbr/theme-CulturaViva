@@ -2980,6 +2980,12 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
         // depois que os plugins/módulos registram os tipos de configuração de avaliação
         $app->hook('app.register', function () use ($app) {
+            $app->view->registerEvauationMethodConfigurationMetadata(EvaluationDistribution::META_DISABLED_ENABLED, [
+                'label' => i::__('Redistribuir avaliações iniciadas de avaliadores desabilitados'),
+                'type' => 'boolean',
+                'default' => true,
+            ]);
+
             $app->view->registerEvauationMethodConfigurationMetadata(EvaluationDistribution::META_STALE_ENABLED, [
                 'label' => i::__('Redistribuir avaliações iniciadas paradas há dias'),
                 'type' => 'boolean',

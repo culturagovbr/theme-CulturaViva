@@ -14,6 +14,9 @@ use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class EvaluationDistribution
 {
+    // liga a redistribuição das avaliações iniciadas dos avaliadores desabilitados
+    public const META_DISABLED_ENABLED = 'redistribuirAvaliacoesIniciadasDesabilitados';
+
     // liga a redistribuição das avaliações iniciadas paradas há dias
     public const META_STALE_ENABLED = 'redistribuirAvaliacoesIniciadasParadas';
 
@@ -75,7 +78,11 @@ final class EvaluationDistribution
                 return;
             }
 
-            self::releaseValuerEvaluations($this);
+            // a redistribuição das pendentes acontece sempre; só a limpeza das
+            // iniciadas depende da opção estar marcada
+            if ($evaluation_config->{self::META_DISABLED_ENABLED}) {
+                self::releaseValuerEvaluations($this);
+            }
 
             $app->enqueueOrReplaceJob(RedistributeCommitteeRegistrations::SLUG, [
                 'evaluationMethodConfiguration' => $evaluation_config,
@@ -148,6 +155,10 @@ final class EvaluationDistribution
     public static function releasePhaseEvaluations(?EvaluationMethodConfiguration $evaluation_config): int
     {
         if (!$evaluation_config || !self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        if (!$evaluation_config->{self::META_DISABLED_ENABLED}) {
             return 0;
         }
 
