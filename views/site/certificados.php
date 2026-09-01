@@ -268,15 +268,7 @@ $this->import('
         </h4>
 
         <p>
-            <?= i::__('Telefone: (61) 2024-2069 / 2024-2070') ?>
-        </p>
-
-        <p>
-            <?= i::__('Email:') ?> <a href="mailto:email@provedor.com.br">culturaviva@cultura.gov.br</a>
-        </p>
-
-        <p>
-            <?= i::__('Site:') ?> <a href="https://culturaviva.gov.br">https://culturaviva.gov.br</a>
+            <?= i::__('Email:') ?> <a href="mailto:culturaviva@cultura.gov.br">culturaviva@cultura.gov.br</a> <?= i::__('ou') ?> <a href="mailto:suporte.culturaviva@cultura.gov.br">suporte.culturaviva@cultura.gov.br</a>
         </p>
 
         <p>
