@@ -27,6 +27,7 @@ final class EvaluationDistribution
     // faixa aceita no campo de dias
     public const STALE_DAYS_MIN = 1;
     public const STALE_DAYS_MAX = 180;
+    const TIEBREAKER_GROUP = '@tiebreaker';
 
     public static function register(): void
     {
@@ -49,7 +50,10 @@ final class EvaluationDistribution
                 return;
             }
 
-            $comparator = self::createComparator($ignore_started_evaluations);
+            $comparator = self::createComparator(
+                $ignore_started_evaluations,
+                self::assignmentsHeld($opportunity, self::TIEBREAKER_GROUP)
+            );
 
             $app->log->debug(sprintf(
                 'CulturaViva: distribuicao uniforme habilitada para a fase %d',
@@ -467,14 +471,46 @@ final class EvaluationDistribution
             && (bool) array_filter($ignore_started_evaluations);
     }
 
-    public static function createComparator(array $ignore_started_evaluations): callable
+    /**
+     * Inscrições que cada avaliador já tem na comissão, no formato [user_id => total]
+     *
+     * Usado só como critério de desempate quando dois avaliadores recebem o mesmo número de
+     * inscrições na rodada.
+     */
+    public static function assignmentsHeld(Opportunity $opportunity, string $committee): array
+    {
+        $rows = App::i()->em->getConnection()->fetchAllAssociative(
+            "SELECT (j.key)::int AS user_id, count(*) AS total
+               FROM registration r
+               CROSS JOIN LATERAL jsonb_each(r.valuers) j
+              WHERE r.opportunity_id = :opportunity_id
+                AND r.status > 0
+                AND jsonb_typeof(r.valuers) = 'object'
+                AND j.value #>> '{}' = :committee
+              GROUP BY 1",
+            [
+                'opportunity_id' => $opportunity->id,
+                'committee' => $committee,
+            ]
+        );
+
+        $held = [];
+
+        foreach ($rows as $row) {
+            $held[(int) $row['user_id']] = (int) $row['total'];
+        }
+
+        return $held;
+    }
+
+    public static function createComparator(array $ignore_started_evaluations, array $assignments_held = []): callable
     {
         return function (
             User $valuer1,
             User $valuer2,
             string $committee,
             array $pending_assignments
-        ) use ($ignore_started_evaluations): ?int {
+        ) use ($ignore_started_evaluations, $assignments_held): ?int {
             if (empty($ignore_started_evaluations[$committee])) {
                 return null;
             }
@@ -482,7 +518,8 @@ final class EvaluationDistribution
             return EvaluationDistribution::comparePendingAssignments(
                 $valuer1,
                 $valuer2,
-                $pending_assignments
+                $pending_assignments,
+                $committee === EvaluationDistribution::TIEBREAKER_GROUP ? $assignments_held : []
             );
         };
     }
@@ -490,13 +527,23 @@ final class EvaluationDistribution
     public static function comparePendingAssignments(
         User $valuer1,
         User $valuer2,
-        array $pending_assignments
+        array $pending_assignments,
+        array $assignments_held = []
     ): int {
         $pending1 = $pending_assignments[$valuer1->id] ?? 0;
         $pending2 = $pending_assignments[$valuer2->id] ?? 0;
 
+        // a divisão da rodada vem primeiro, e é ela que mantém o lote repartido em partes iguais
         if ($pending1 !== $pending2) {
             return $pending1 <=> $pending2;
+        }
+
+        // em caso de empate na rodada, prioriza quem tem menos inscrições no total
+        $held1 = $assignments_held[$valuer1->id] ?? 0;
+        $held2 = $assignments_held[$valuer2->id] ?? 0;
+
+        if ($held1 !== $held2) {
+            return $held1 <=> $held2;
         }
 
         return $valuer1->id <=> $valuer2->id;

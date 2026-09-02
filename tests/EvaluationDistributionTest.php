@@ -179,6 +179,53 @@ class EvaluationDistributionTest extends TestCase
         $this->assertTrue(EvaluationDistribution::isStaleDaysInRange($this->config(false, null), 500));
     }
 
+    function testTheRoundSplitComesBeforeTheHeldAssignments(): void
+    {
+        $valuer1 = new TestValuer(10);
+        $valuer2 = new TestValuer(20);
+
+        // o 10 tem muito mais acumulado, mas recebeu menos nesta rodada e vem primeiro
+        $result = EvaluationDistribution::comparePendingAssignments(
+            $valuer1,
+            $valuer2,
+            [10 => 1, 20 => 3],
+            [10 => 500, 20 => 0]
+        );
+
+        $this->assertLessThan(0, $result);
+    }
+
+    function testHeldAssignmentsRotateTheTurnOnTies(): void
+    {
+        $valuer1 = new TestValuer(10);
+        $valuer2 = new TestValuer(20);
+
+        // empatados na rodada: começa quem tem menos, e não o de menor id
+        $result = EvaluationDistribution::comparePendingAssignments(
+            $valuer1,
+            $valuer2,
+            [10 => 2, 20 => 2],
+            [10 => 9, 20 => 4]
+        );
+
+        $this->assertGreaterThan(0, $result);
+    }
+
+    function testOnlyTheTiebreakerRotatesTheTurn(): void
+    {
+        $comparator = EvaluationDistribution::createComparator(
+            [EvaluationDistribution::TIEBREAKER_GROUP => true, 'committee 1' => true],
+            [10 => 9, 20 => 4]
+        );
+        $valuer1 = new TestValuer(10);
+        $valuer2 = new TestValuer(20);
+
+        $this->assertGreaterThan(0, $comparator($valuer1, $valuer2, EvaluationDistribution::TIEBREAKER_GROUP, []));
+
+        // a comissão comum segue com o id como desempate, como antes
+        $this->assertLessThan(0, $comparator($valuer1, $valuer2, 'committee 1', []));
+    }
+
     function testComparatorDelegatesDisabledCommitteesToCore(): void
     {
         $comparator = EvaluationDistribution::createComparator([
