@@ -62,8 +62,22 @@ $this->import('
             <?= i::__('Quanto tempo leva?') ?>
         </h4>
 
-        <p><?= i::__('Entre 0 e 3 mês(es) é o tempo estimado para a prestação deste serviço.') ?></p>
-        
+        <p>
+            <?= i::__('O prazo estimado para análise e divulgação do resultado da inscrição no Cadastro Nacional de Pontos e Pontões de Cultura é de até 180 dias, contados a partir da conclusão da inscrição e do envio de todas as informações e documentos necessários.') ?>
+        </p>
+
+        <p>
+            <?= i::__('O prazo poderá variar de acordo com a demanda de inscrições submetidas à análise da Comissão de Certificação.') ?>
+        </p>
+
+        <p>
+            <?= i::__('A Comissão Nacional de Certificação é paritária, composta por representantes do poder público e da sociedade civil. Atualmente, é formada por 80 membros, sendo 40 representantes do poder público, indicados pela Secretaria de Cidadania e Diversidade Cultural, e 40 representantes da sociedade civil, indicados pela Comissão Nacional de Pontos de Cultura e pelo Conselho Nacional de Políticas Culturais.') ?>
+        </p>
+
+        <p>
+            <?= i::__('A análise das inscrições é realizada de forma voluntária pelos integrantes da Comissão, que contribuem para o processo de reconhecimento e certificação dos Pontos e Pontões de Cultura em todo o país.') ?>
+        </p>
+
         <mc-accordion>
             <template #title>
                 <h4 class="bold">
