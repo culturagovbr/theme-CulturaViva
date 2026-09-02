@@ -94,6 +94,7 @@ class EvaluationDistributionTest extends TestCase
     {
         $this->assertSame(0, EvaluationDistribution::releasePhaseEvaluations(null));
         $this->assertSame(0, EvaluationDistribution::releaseValuerEvaluations(null));
+        $this->assertSame(0, EvaluationDistribution::releaseTiebreakerPendingAssignments(null));
     }
 
     function testStaleReleaseRefusesWithoutAConfigurationOrRelation(): void

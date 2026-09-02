@@ -61,14 +61,15 @@ final class EvaluationDistribution
             ));
         });
 
-        // antes de cada redistribuição, libera as iniciadas dos desabilitados
-        // e as iniciadas paradas há dias dos avaliadores habilitados
+        // antes de cada redistribuição: libera as iniciadas dos desabilitados, as iniciadas
+        // paradas há dias dos habilitados e as pendentes de desempate ainda não iniciadas
         $app->hook('job(' . RedistributeCommitteeRegistrations::SLUG . ').execute:before', function () {
             /** @var \MapasCulturais\Entities\Job $this */
             $evaluation_config = $this->evaluationMethodConfiguration ?? null;
 
             self::releasePhaseEvaluations($evaluation_config);
             self::releaseStalePhaseEvaluations($evaluation_config);
+            self::releaseTiebreakerPendingAssignments($evaluation_config);
         });
 
         // ao desabilitar, libera as iniciadas e redistribui as pendentes
@@ -209,6 +210,57 @@ final class EvaluationDistribution
 
         foreach ($evaluation_config->getAgentRelations() as $relation) {
             $released += self::releaseValuerEvaluations($relation);
+        }
+
+        return $released;
+    }
+
+    // solta o avaliador de desempate das inscrições ainda sem avaliação começada, para a
+    // redistribuição seguinte reparti-las de novo entre os habilitados
+    public static function releaseTiebreakerPendingAssignments(?EvaluationMethodConfiguration $evaluation_config): int
+    {
+        if (!$evaluation_config || !self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        $conn = App::i()->em->getConnection();
+
+        $released = (int) $conn->executeStatement(
+            "UPDATE registration r
+                SET valuers = COALESCE((
+                        SELECT jsonb_object_agg(j.key, j.value)
+                          FROM jsonb_each(r.valuers) j
+                         WHERE j.value #>> '{}' <> :committee
+                            OR EXISTS (
+                                SELECT 1 FROM registration_evaluation re
+                                 WHERE re.registration_id = r.id
+                                   AND re.user_id = (j.key)::int
+                            )
+                    ), '[]'::jsonb)
+              WHERE r.opportunity_id = :opportunity_id
+                AND r.status = 1 -- a redistribuição pula status > 1; soltar essas deixaria a inscrição órfã
+                AND jsonb_typeof(r.valuers) = 'object'
+                AND EXISTS (
+                        SELECT 1 FROM jsonb_each(r.valuers) j2
+                         WHERE j2.value #>> '{}' = :committee
+                           AND NOT EXISTS (
+                                SELECT 1 FROM registration_evaluation re2
+                                 WHERE re2.registration_id = r.id
+                                   AND re2.user_id = (j2.key)::int
+                           )
+                    )",
+            [
+                'opportunity_id' => $evaluation_config->opportunity->id,
+                'committee' => self::TIEBREAKER_GROUP,
+            ]
+        );
+
+        if ($released > 0) {
+            App::i()->log->debug(sprintf(
+                'CulturaViva: %d inscricoes de desempate reservadas devolvidas para a fila na fase %d',
+                $released,
+                $evaluation_config->opportunity->id
+            ));
         }
 
         return $released;
