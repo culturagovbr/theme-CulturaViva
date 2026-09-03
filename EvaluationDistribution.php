@@ -3,6 +3,7 @@
 namespace CulturaViva;
 
 use MapasCulturais\App;
+use MapasCulturais\i;
 use MapasCulturais\Entities\EvaluationMethodConfiguration;
 use MapasCulturais\Entities\EvaluationMethodConfigurationAgentRelation;
 use MapasCulturais\Entities\Opportunity;
@@ -14,10 +15,25 @@ use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class EvaluationDistribution
 {
+    // liga a redistribuição das avaliações iniciadas dos avaliadores desabilitados
+    public const META_DISABLED_ENABLED = 'redistribuirAvaliacoesIniciadasDesabilitados';
+
+    // liga a redistribuição das avaliações iniciadas paradas há dias
+    public const META_STALE_ENABLED = 'redistribuirAvaliacoesIniciadasParadas';
+
+    // dias parada como rascunho a partir dos quais a avaliação volta para a fila
+    public const META_STALE_DAYS = 'diasAvaliacaoIniciadaParada';
+
+    // faixa aceita no campo de dias
+    public const STALE_DAYS_MIN = 1;
+    public const STALE_DAYS_MAX = 180;
+
     public static function register(): void
     {
         $app = App::i();
         $opportunity_ids = self::configuredOpportunityIds();
+
+        self::registerMetadata();
 
         $app->hook('evaluationMethod.distributionComparator', function (&$comparator, Opportunity $opportunity) use ($app, $opportunity_ids) {
             $first_phase = $opportunity->firstPhase ?: $opportunity;
@@ -41,10 +57,14 @@ final class EvaluationDistribution
             ));
         });
 
-        // libera as iniciadas dos desabilitados antes de cada redistribuição
+        // antes de cada redistribuição, libera as iniciadas dos desabilitados
+        // e as iniciadas paradas há dias dos avaliadores habilitados
         $app->hook('job(' . RedistributeCommitteeRegistrations::SLUG . ').execute:before', function () {
             /** @var \MapasCulturais\Entities\Job $this */
-            self::releasePhaseEvaluations($this->evaluationMethodConfiguration ?? null);
+            $evaluation_config = $this->evaluationMethodConfiguration ?? null;
+
+            self::releasePhaseEvaluations($evaluation_config);
+            self::releaseStalePhaseEvaluations($evaluation_config);
         });
 
         // ao desabilitar, libera as iniciadas e redistribui as pendentes
@@ -61,17 +81,123 @@ final class EvaluationDistribution
                 return;
             }
 
-            self::releaseValuerEvaluations($this);
+            // a redistribuição das pendentes acontece sempre; só a limpeza das
+            // iniciadas depende da opção estar marcada
+            if ($evaluation_config->{self::META_DISABLED_ENABLED}) {
+                self::releaseValuerEvaluations($this);
+            }
 
             $app->enqueueOrReplaceJob(RedistributeCommitteeRegistrations::SLUG, [
                 'evaluationMethodConfiguration' => $evaluation_config,
             ], 'now');
         });
+
+        // consistência entre o checkbox, o campo de dias e o agendamento da distribuição
+        $app->hook('entity(EvaluationMethodConfiguration).save:before', function () {
+            /** @var EvaluationMethodConfiguration $this */
+            $enabled_key = EvaluationDistribution::META_STALE_ENABLED;
+            $days_key = EvaluationDistribution::META_STALE_DAYS;
+
+            // proteção: ao desativar a distribuição, desliga a opção
+            if ($this->$enabled_key && ($this->distributionConfiguration ?? 'deactivate') == 'deactivate') {
+                $this->$enabled_key = false;
+            }
+
+            // marcada sem uma quantidade de dias válida: desliga a opção
+            // (rede de segurança para quando o erro de validação não chega à tela)
+            $days = $this->$enabled_key ? EvaluationDistribution::normalizeStaleDays($this->$days_key) : 0;
+
+            if (!$days) {
+                if ($this->$enabled_key) {
+                    $this->$enabled_key = false;
+                }
+
+                if ($this->$days_key !== null) {
+                    $this->$days_key = null;
+                }
+
+                return;
+            }
+
+            // marcada: mantém a quantidade de dias dentro da faixa aceita
+            if ($days !== $this->$days_key) {
+                $this->$days_key = $days;
+            }
+        });
+    }
+
+    // registra os metadados de configuração da EMC
+    public static function registerMetadata(): void
+    {
+        $theme = App::i()->view;
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_DISABLED_ENABLED, [
+            'label' => i::__('Redistribuir avaliações iniciadas de avaliadores desabilitados'),
+            'type' => 'boolean',
+            'default' => true,
+        ]);
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_STALE_ENABLED, [
+            'label' => i::__('Redistribuir avaliações iniciadas paradas há dias'),
+            'type' => 'boolean',
+            'default' => false,
+        ]);
+
+        $days_message = sprintf(
+            i::__('Informe uma quantidade de dias entre %d e %d.'),
+            self::STALE_DAYS_MIN,
+            self::STALE_DAYS_MAX
+        );
+
+        $theme->registerEvauationMethodConfigurationMetadata(self::META_STALE_DAYS, [
+            'label' => i::__('Dias parado como iniciada para redistribuir a avaliação'),
+            'type' => 'integer',
+            'min' => self::STALE_DAYS_MIN,
+            'max' => self::STALE_DAYS_MAX,
+            // obrigatório quando a opção está marcada e ainda não há valor válido
+            'should_validate' => fn ($entity) => self::staleDaysRequired($entity) ? $days_message : false,
+            // faixa 1..180 quando há valor preenchido e a opção está marcada
+            'validations' => [
+                '\CulturaViva\EvaluationDistribution::isStaleDaysInRange($entity, $value)' => $days_message,
+            ],
+        ]);
+    }
+
+    // a opção de redistribuir por tempo está valendo (marcada e com distribuição ativa)
+    public static function staleConfigActive(EvaluationMethodConfiguration $evaluation_config): bool
+    {
+        return (bool) $evaluation_config->{self::META_STALE_ENABLED}
+            && ($evaluation_config->distributionConfiguration ?? 'deactivate') != 'deactivate';
+    }
+
+    // o campo de dias é obrigatório e ainda não tem um valor válido preenchido
+    // (usado pelo should_validate do metadado, no caso de valor vazio)
+    public static function staleDaysRequired(EvaluationMethodConfiguration $evaluation_config): bool
+    {
+        return self::staleConfigActive($evaluation_config)
+            && self::normalizeStaleDays($evaluation_config->{self::META_STALE_DAYS}) < self::STALE_DAYS_MIN;
+    }
+
+    // o valor informado está dentro da faixa aceita (usado pelo 'validations' do
+    // metadado, quando há valor preenchido). só cobra a faixa se a opção vale.
+    public static function isStaleDaysInRange(EvaluationMethodConfiguration $evaluation_config, $value): bool
+    {
+        if (!self::staleConfigActive($evaluation_config)) {
+            return true;
+        }
+
+        $days = (int) $value;
+
+        return $days >= self::STALE_DAYS_MIN && $days <= self::STALE_DAYS_MAX;
     }
 
     public static function releasePhaseEvaluations(?EvaluationMethodConfiguration $evaluation_config): int
     {
         if (!$evaluation_config || !self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        if (!$evaluation_config->{self::META_DISABLED_ENABLED}) {
             return 0;
         }
 
@@ -107,10 +233,115 @@ final class EvaluationDistribution
             return 0;
         }
 
+        // só rascunho volta para a fila; concluída e enviada permanecem
+        $released = self::deleteValuerEvaluations(
+            $relation,
+            fn ($evaluation) => $evaluation->status == RegistrationEvaluation::STATUS_DRAFT
+        );
+
+        if ($released > 0) {
+            App::i()->log->debug(sprintf(
+                'CulturaViva: %d avaliacoes iniciadas liberadas do avaliador %d na fase %d',
+                $released,
+                $user->id,
+                $evaluation_config->opportunity->id
+            ));
+        }
+
+        return $released;
+    }
+
+    public static function releaseStalePhaseEvaluations(?EvaluationMethodConfiguration $evaluation_config): int
+    {
+        if (!$evaluation_config || !self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        // com a distribuição desligada, liberar a vaga não levaria a lugar nenhum
+        if (($evaluation_config->distributionConfiguration ?? 'deactivate') == 'deactivate') {
+            return 0;
+        }
+
+        if (!$evaluation_config->{self::META_STALE_ENABLED}) {
+            return 0;
+        }
+
+        $days = self::normalizeStaleDays($evaluation_config->{self::META_STALE_DAYS});
+
+        if ($days < self::STALE_DAYS_MIN) {
+            return 0;
+        }
+
+        $released = 0;
+
+        foreach ($evaluation_config->getAgentRelations() as $relation) {
+            $released += self::releaseStaleValuerEvaluations($relation, $days);
+        }
+
+        return $released;
+    }
+
+    public static function releaseStaleValuerEvaluations(?EvaluationMethodConfigurationAgentRelation $relation, int $days): int
+    {
+        if (!$relation || $relation->status != EvaluationMethodConfigurationAgentRelation::STATUS_ENABLED) {
+            return 0;
+        }
+
+        if ($days < self::STALE_DAYS_MIN) {
+            return 0;
+        }
+
+        $evaluation_config = $relation->owner;
+
+        if (!self::isCulturaVivaPhase($evaluation_config, self::configuredOpportunityIds())) {
+            return 0;
+        }
+
+        $user = $relation->agent->user ?? null;
+
+        if (!$user) {
+            return 0;
+        }
+
+        $now = new \DateTimeImmutable();
+
+        // concluída e enviada permanecem; só o rascunho parado além do limite volta para a fila
+        $released = self::deleteValuerEvaluations($relation, fn ($evaluation) => self::isStaleStartedEvaluation(
+            (int) $evaluation->status,
+            $evaluation->updateTimestamp ?: $evaluation->createTimestamp,
+            $days,
+            $now
+        ));
+
+        if ($released > 0) {
+            App::i()->log->debug(sprintf(
+                'CulturaViva: %d avaliacoes iniciadas paradas ha %d+ dias liberadas do avaliador %d na fase %d',
+                $released,
+                $days,
+                $user->id,
+                $evaluation_config->opportunity->id
+            ));
+        }
+
+        return $released;
+    }
+
+    /**
+     * Remove as avaliações do avaliador que o predicado marcar e atualiza o resumo.
+     *
+     * Cuida do contexto de execução: em job não há requisição, e os listeners
+     * de remove:after contam com uma.
+     *
+     * @param callable(RegistrationEvaluation): bool $should_release
+     */
+    private static function deleteValuerEvaluations(EvaluationMethodConfigurationAgentRelation $relation, callable $should_release): int
+    {
         $app = App::i();
+        $evaluation_config = $relation->owner;
+
         $evaluations = $app->repo('RegistrationEvaluation')->findByOpportunityAndUser(
             $evaluation_config->opportunity,
-            $user,
+            $relation->agent->user,
             $relation->group
         );
 
@@ -118,12 +349,10 @@ final class EvaluationDistribution
         $http_request = $app->request;
 
         $app->disableAccessControl();
-        // em job não há requisição, e os listeners de remove:after contam com uma
         $app->request = $http_request ?: self::backgroundRequest();
         try {
             foreach ($evaluations as $evaluation) {
-                // só rascunho volta para a fila; concluída e enviada permanecem
-                if ($evaluation->status != RegistrationEvaluation::STATUS_DRAFT) {
+                if (!$should_release($evaluation)) {
                     continue;
                 }
 
@@ -137,16 +366,40 @@ final class EvaluationDistribution
 
         $relation->updateSummary();
 
-        if ($released > 0) {
-            $app->log->debug(sprintf(
-                'CulturaViva: %d avaliacoes iniciadas liberadas do avaliador %d na fase %d',
-                $released,
-                $user->id,
-                $evaluation_config->opportunity->id
-            ));
+        return $released;
+    }
+
+    // rascunho cuja última atividade passou do limite de dias configurado
+    public static function isStaleStartedEvaluation(
+        int $status,
+        ?\DateTimeInterface $last_activity,
+        int $days,
+        ?\DateTimeInterface $now = null
+    ): bool {
+        if ($status != RegistrationEvaluation::STATUS_DRAFT) {
+            return false;
         }
 
-        return $released;
+        if ($days < self::STALE_DAYS_MIN || !$last_activity) {
+            return false;
+        }
+
+        $now = $now ? \DateTimeImmutable::createFromInterface($now) : new \DateTimeImmutable();
+        $limit = $now->modify("-{$days} days");
+
+        return $last_activity <= $limit;
+    }
+
+    // mantém o valor dentro da faixa aceita; fora dela, devolve 0 (desligado)
+    public static function normalizeStaleDays($value): int
+    {
+        $days = (int) $value;
+
+        if ($days < self::STALE_DAYS_MIN) {
+            return 0;
+        }
+
+        return min($days, self::STALE_DAYS_MAX);
     }
 
     private static function hasEnabledRelation(
