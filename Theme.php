@@ -82,6 +82,15 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->enqueueScript('components', 'culturaviva-qualification-evaluation-recommendations', 'js/qualification-evaluation-recommendations.js', ['qualification-evaluation-form']);
         }, 1000);
 
+        // trava o reenvio de avaliação enquanto o envio anterior não termina
+        $app->hook('Theme::enqueueComponentScript', function($result, string $component, array $dependences = []) {
+            if ($component !== 'evaluation-actions') {
+                return;
+            }
+
+            $this->enqueueScript('components', 'culturaviva-evaluation-submit-guard', 'js/evaluation-submit-guard.js', ['evaluation-actions']);
+        }, 1000);
+
         // Ajusta titulo da página do formulário
         $app->hook('mapasculturais.getTitle', function(&$title) use ($app) {
             $entity = $this->controller->requestedEntity;
