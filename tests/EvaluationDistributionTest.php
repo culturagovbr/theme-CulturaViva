@@ -3,6 +3,8 @@
 namespace CulturaViva\Tests;
 
 use CulturaViva\EvaluationDistribution;
+use MapasCulturais\Entities\EvaluationMethodConfiguration;
+use MapasCulturais\Entities\RegistrationEvaluation;
 use MapasCulturais\Entities\User;
 use PHPUnit\Framework\TestCase;
 
@@ -15,6 +17,19 @@ class TestValuer extends User
     public function __construct(int $id)
     {
         $this->id = $id;
+    }
+}
+
+// dublê de EvaluationMethodConfiguration: as propriedades públicas declaradas
+// atendem os acessos das validações sem passar pelo __get (que exige o App)
+class TestEvaluationConfig extends EvaluationMethodConfiguration
+{
+    public $redistribuirAvaliacoesIniciadasParadas = false;
+    public $diasAvaliacaoIniciadaParada = null;
+    public $distributionConfiguration = 'hourly';
+
+    public function __construct()
+    {
     }
 }
 
@@ -79,6 +94,89 @@ class EvaluationDistributionTest extends TestCase
     {
         $this->assertSame(0, EvaluationDistribution::releasePhaseEvaluations(null));
         $this->assertSame(0, EvaluationDistribution::releaseValuerEvaluations(null));
+    }
+
+    function testStaleReleaseRefusesWithoutAConfigurationOrRelation(): void
+    {
+        $this->assertSame(0, EvaluationDistribution::releaseStalePhaseEvaluations(null));
+        $this->assertSame(0, EvaluationDistribution::releaseStaleValuerEvaluations(null, 5));
+    }
+
+    function testNormalizeStaleDaysKeepsValueInRange(): void
+    {
+        $this->assertSame(0, EvaluationDistribution::normalizeStaleDays(0));
+        $this->assertSame(0, EvaluationDistribution::normalizeStaleDays(-3));
+        $this->assertSame(0, EvaluationDistribution::normalizeStaleDays('abc'));
+        $this->assertSame(1, EvaluationDistribution::normalizeStaleDays(1));
+        $this->assertSame(45, EvaluationDistribution::normalizeStaleDays('45'));
+        $this->assertSame(180, EvaluationDistribution::normalizeStaleDays(180));
+        $this->assertSame(180, EvaluationDistribution::normalizeStaleDays(999));
+    }
+
+    function testIsStaleStartedEvaluationOnlyMatchesOldDrafts(): void
+    {
+        $now = new \DateTimeImmutable('2026-08-27 12:00:00');
+        $old = new \DateTimeImmutable('2026-08-20 11:59:00');
+        $recent = new \DateTimeImmutable('2026-08-24 12:00:00');
+
+        // rascunho parado há mais de 5 dias volta para a fila
+        $this->assertTrue(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_DRAFT, $old, 5, $now));
+
+        // rascunho recente permanece
+        $this->assertFalse(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_DRAFT, $recent, 5, $now));
+
+        // concluída e enviada nunca voltam, mesmo antigas
+        $this->assertFalse(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_EVALUATED, $old, 5, $now));
+        $this->assertFalse(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_SENT, $old, 5, $now));
+
+        // sem data de atividade ou sem dias válidos, não mexe
+        $this->assertFalse(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_DRAFT, null, 5, $now));
+        $this->assertFalse(EvaluationDistribution::isStaleStartedEvaluation(RegistrationEvaluation::STATUS_DRAFT, $old, 0, $now));
+    }
+
+    private function config(bool $enabled, $days, string $distribution = 'hourly'): TestEvaluationConfig
+    {
+        $config = new TestEvaluationConfig();
+        $config->{EvaluationDistribution::META_STALE_ENABLED} = $enabled;
+        $config->{EvaluationDistribution::META_STALE_DAYS} = $days;
+        $config->distributionConfiguration = $distribution;
+
+        return $config;
+    }
+
+    function testStaleDaysRequiredSoQuandoMarcadaSemValorValido(): void
+    {
+        // marcada com valor na faixa: não exige mais nada
+        $this->assertFalse(EvaluationDistribution::staleDaysRequired($this->config(true, 45)));
+
+        // marcada e vazia (ou zero): exige
+        $this->assertTrue(EvaluationDistribution::staleDaysRequired($this->config(true, null)));
+        $this->assertTrue(EvaluationDistribution::staleDaysRequired($this->config(true, 0)));
+
+        // fora da faixa (500) é responsabilidade do isStaleDaysInRange, não daqui
+        $this->assertFalse(EvaluationDistribution::staleDaysRequired($this->config(true, 500)));
+
+        // desmarcada: nunca exige
+        $this->assertFalse(EvaluationDistribution::staleDaysRequired($this->config(false, null)));
+
+        // distribuição desativada: não exige (fica dormente)
+        $this->assertFalse(EvaluationDistribution::staleDaysRequired($this->config(true, null, 'deactivate')));
+    }
+
+    function testIsStaleDaysInRangeSoCobraFaixaQuandoMarcada(): void
+    {
+        $enabled = $this->config(true, null);
+
+        $this->assertTrue(EvaluationDistribution::isStaleDaysInRange($enabled, 1));
+        $this->assertTrue(EvaluationDistribution::isStaleDaysInRange($enabled, 45));
+        $this->assertTrue(EvaluationDistribution::isStaleDaysInRange($enabled, 180));
+
+        $this->assertFalse(EvaluationDistribution::isStaleDaysInRange($enabled, 0));
+        $this->assertFalse(EvaluationDistribution::isStaleDaysInRange($enabled, 181));
+        $this->assertFalse(EvaluationDistribution::isStaleDaysInRange($enabled, 500));
+
+        // desmarcada: qualquer valor passa
+        $this->assertTrue(EvaluationDistribution::isStaleDaysInRange($this->config(false, null), 500));
     }
 
     function testComparatorDelegatesDisabledCommitteesToCore(): void
