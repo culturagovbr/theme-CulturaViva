@@ -923,8 +923,8 @@ class Importer {
                     continue;
                 }
 
+                // CNPJ (via @keyword acima) + CPF já identificam a organização
                 if ($coletivo && $coletivo_status >= 0
-                    && $app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome)
                     && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)
                 ) {
                     return [
