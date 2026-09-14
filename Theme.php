@@ -2261,6 +2261,53 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
+        // Bloqueia no servidor o envio de cadastro com CNPJ já certificado na mesma categoria
+        $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app) {
+            /** @var \MapasCulturais\Entities\Registration $this */
+            if ($this->opportunity->id !== (int) $app->config['rcv.opportunityId']) {
+                return;
+            }
+
+            if ($this->range !== ($app->config['rcv.rangesMap']['cadastro'] ?? 'Cadastro')) {
+                return;
+            }
+
+            $coletivo = $this->relatedAgents['coletivo'][0] ?? null;
+            $cnpjDigits = $coletivo ? preg_replace('/\D/', '', (string) $coletivo->cnpj) : '';
+            if (strlen($cnpjDigits) !== 14) {
+                return;
+            }
+
+            $registrationObjectType = Registration::class;
+            $conn = $app->em->getConnection();
+            $count = $conn->fetchOne("
+                SELECT COUNT(DISTINCT r.id)
+                FROM registration r
+                INNER JOIN agent_relation ar ON ar.object_id = r.id
+                    AND ar.object_type = '{$registrationObjectType}'
+                    AND ar.type = 'coletivo'
+                INNER JOIN agent_meta am ON am.object_id = ar.agent_id
+                    AND am.key IN ('cnpj', 'documento')
+                    AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
+                WHERE r.opportunity_id = :oppId
+                  AND r.category = :category
+                  AND r.status != :trash
+                  AND r.status != :notApproved
+                  AND r.id != :selfId
+            ", [
+                'digits'      => $cnpjDigits,
+                'category'    => $this->category,
+                'oppId'       => (int) $app->config['rcv.opportunityId'],
+                'trash'       => Registration::STATUS_TRASH,
+                'notApproved' => Registration::STATUS_NOTAPPROVED,
+                'selfId'      => $this->id,
+            ]);
+
+            if ((int) $count > 0) {
+                $errorsResult['agent_cnpj'] = [i::__('Já existe um cadastro certificado com este CNPJ nesta categoria.')];
+            }
+        });
+
         // Remove campos de anexo da etapa 7 da tela de atualização cadastral
         $app->hook('entity(Opportunity).registrationFileConfigurations', function(&$result) use ($app, $self) {
             /** @var \MapasCulturais\Entities\Opportunity $this */

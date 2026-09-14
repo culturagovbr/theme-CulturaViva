@@ -728,6 +728,16 @@ class Importer {
      * @deprecated Usar findOrganizationFromOtherAgentReadOnly() na Fase A
      */
     static function findOrganizationFromOtherAgent(object $row): ?Agent {
+        return self::findOrganizationFromOtherAgentWithReason($row)['organization'];
+    }
+
+    /**
+     * Núcleo do Cenário 5. Motivo do alerta: 'diferente', 'malformado' ou 'sem_cpf'.
+     *
+     * @param object $row
+     * @return array{organization: Agent|null, reason: string|null}
+     */
+    private static function findOrganizationFromOtherAgentWithReason(object $row): array {
         $app = App::i();
 
         if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
@@ -747,11 +757,12 @@ class Importer {
             $ids = $query->findIds();
         }
 
-        
+        $sem_conflito = ['organization' => null, 'reason' => null];
+
         $organizations = $app->repo('Agent')->findBy(['id' => $ids]);
         foreach($organizations as $org) {
             if (Utils::formatCnpjCpf($org->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)) {
-                return null;
+                return $sem_conflito;
             }
         }
 
@@ -759,43 +770,43 @@ class Importer {
         $organization = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
 
         if ( !$organization ) {
-            return null;
+            return $sem_conflito;
         }
 
         if($organization->status < 0) {
-            return null;
+            return $sem_conflito;
         }
 
         $owner = $organization->owner;
 
         if ($owner && $owner->type->id != 1) {
-            return null;
+            return $sem_conflito;
         }
 
-        if(!$organization->owner->cpf && $organization->owner->name != $row->responsavel_nome) {
-            return $organization;
+        if (!$organization->owner->cpf) {
+            return ['organization' => $organization, 'reason' => 'sem_cpf'];
         }
 
         if (!v::cpf()->validate($organization->owner->cpf)) {
-            return null;
+            return ['organization' => $organization, 'reason' => 'malformado'];
         }
 
         if (Utils::formatCnpjCpf($organization->owner->cpf) != Utils::formatCnpjCpf($row->responsavel_cpf)) {
-            return $organization;
+            return ['organization' => $organization, 'reason' => 'diferente'];
         }
 
-        return null;
+        return $sem_conflito;
     }
 
     /**
-     * Versão read-only de findOrganizationFromOtherAgent.
+     * Versão read-only de findOrganizationFromOtherAgent, com o motivo do alerta.
      * Idêntica ao original — já não fazia writes.
      *
      * @param object $row
-     * @return Agent|null
+     * @return array{organization: Agent|null, reason: string|null}
      */
-    public static function findOrganizationFromOtherAgentReadOnly(object $row): ?Agent {
-        return self::findOrganizationFromOtherAgent($row);
+    public static function findOrganizationFromOtherAgentReadOnly(object $row): array {
+        return self::findOrganizationFromOtherAgentWithReason($row);
     }
 
     /** 
@@ -923,8 +934,8 @@ class Importer {
                     continue;
                 }
 
+                // CNPJ (via @keyword acima) + CPF já identificam a organização
                 if ($coletivo && $coletivo_status >= 0
-                    && $app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome)
                     && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)
                 ) {
                     return [
@@ -1101,11 +1112,13 @@ class Importer {
         ];
 
         // Cenário 5: CPF conflitante (organização vinculada a outro responsável)
-        if ($org = self::findOrganizationFromOtherAgentReadOnly($row)) {
+        $cenario5 = self::findOrganizationFromOtherAgentReadOnly($row);
+        if ($org = $cenario5['organization']) {
             $decision['scenario']        = 5;
             $decision['organization_id'] = self::entityId($org);
             $decision['email']['organization_name'] = $org->name;
             $decision['email']['organization_cnpj'] = $org->cnpj;
+            $decision['email']['scenario5_reason']   = $cenario5['reason'];
             return $decision;
         }
 
@@ -2014,7 +2027,7 @@ class Importer {
                     break;
 
                 case 5:
-                    $template = 'quinto_caso.html';
+                    $template = ($e['scenario5_reason'] ?? null) === 'diferente' ? 'quinto_caso.html' : 'quinto_caso_nao_confirmado.html';
                     $template_data = [
                         'siteName'         => $app->siteName,
                         'userName'         => $e['user_name'],
@@ -2023,7 +2036,7 @@ class Importer {
                         'organizationCNPJ' => $e['organization_cnpj'],
                         'type'             => $e['category'],
                     ];
-                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    $subject = "[Cultura Viva] Pendência no cadastro da organização {$e['organization_name']}";
                     break;
 
                 default:
