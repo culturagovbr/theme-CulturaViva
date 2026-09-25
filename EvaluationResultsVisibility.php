@@ -71,13 +71,20 @@ final class EvaluationResultsVisibility
         $theme->registerEvauationMethodConfigurationMetadata(self::META_ONLY_FINAL, [
             'label' => i::__('Exibir os pareceres somente após o resultado final (habilitado ou inabilitado)'),
             'type' => 'boolean',
-            'default' => false,
+            'default' => true,
         ]);
 
         $theme->registerEvauationMethodConfigurationMetadata(self::META_ADMIN_VIEW, [
             'label' => i::__('Permitir que administradores vejam os pareceres, mesmo sem publicá-los'),
             'type' => 'boolean',
-            'default' => false,
+            'default' => true,
+        ]);
+
+        // redefine o metadado do módulo Opportunities, já registrado quando o tema inicia, para nascer marcado
+        $theme->registerEvauationMethodConfigurationMetadata('publishEvaluationDetails', [
+            'label' => i::__('Publicar os pareceres para o proponente'),
+            'type' => 'json',
+            'default' => true,
         ]);
     }
 
