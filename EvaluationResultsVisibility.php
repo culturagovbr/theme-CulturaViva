@@ -61,12 +61,19 @@ final class EvaluationResultsVisibility
 
             $this->enqueueScript('components', 'culturaviva-evaluation-results-visibility', 'js/evaluation-results-visibility.js', ['registration-status']);
         }, 1000);
+
+        // adiciona as opções logo abaixo da publicação de resultados
+        $app->hook('component(opportunity-phase-publish-date-config):after', function () {
+            /** @var Theme $this */
+            $this->part('evaluation-results-visibility-config');
+        });
     }
 
     // registra os metadados de configuração da EMC
     public static function registerMetadata(): void
     {
-        $theme = App::i()->view;
+        $app = App::i();
+        $theme = $app->view;
 
         $theme->registerEvauationMethodConfigurationMetadata(self::META_ONLY_FINAL, [
             'label' => i::__('Exibir os pareceres somente após o resultado final (habilitado ou inabilitado)'),
@@ -80,12 +87,10 @@ final class EvaluationResultsVisibility
             'default' => true,
         ]);
 
-        // redefine o metadado do módulo Opportunities, já registrado quando o tema inicia, para nascer marcado
-        $theme->registerEvauationMethodConfigurationMetadata('publishEvaluationDetails', [
-            'label' => i::__('Publicar os pareceres para o proponente'),
-            'type' => 'json',
-            'default' => true,
-        ]);
+        // publicação dos pareceres do core nasce marcada; o módulo já a registrou quando o tema inicia
+        if ($publish_details = $app->getRegisteredMetadataByMetakey('publishEvaluationDetails', EvaluationMethodConfiguration::class)) {
+            $publish_details->default_value = true;
+        }
     }
 
     // aplica as opções do tema sobre a decisão do core ($published)
