@@ -4,6 +4,7 @@
  * @var \MapasCulturais\App $app
  */
 
+use CulturaViva\EvaluationResultsVisibility;
 use MapasCulturais\i;
 
 $this->layout = 'registrations';
@@ -37,15 +38,19 @@ $entity = $entity->firstPhase;
 
 $registration = $entity;
 $result = [];
+$admin_can_view = [];
 
 if ($all_registrations = $app->repo('Registration')->findBy(['number' => $entity->number])) {
     foreach ($all_registrations as $reg) {
         $em = $reg->evaluationMethod;
-        $result[$reg->id] = $em ? $em->shouldDisplayEvaluationResults($reg) : false;
+        $published = $em ? $em->shouldDisplayEvaluationResults($reg) : false;
+        $result[$reg->id] = EvaluationResultsVisibility::shouldDisplay($reg, $published);
+        $admin_can_view[$reg->id] = EvaluationResultsVisibility::adminCanView($reg);
     }
 }
 
 $this->jsObject['config']['registrationResults']['shouldDisplayEvaluationResults'] = $result;
+$this->jsObject['config']['registrationResults']['adminCanViewEvaluationResults'] = $admin_can_view;
 
 $today = new DateTime();
 ?>
