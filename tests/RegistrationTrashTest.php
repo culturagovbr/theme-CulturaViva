@@ -173,6 +173,52 @@ class RegistrationTrashTest extends TestCase
         $this->assertFalse(RegistrationTrash::hasUsableRecord('nao e json'));
     }
 
+    function testNormalizaParametrosDaLista(): void
+    {
+        $this->assertSame(['busca' => '', 'filtro' => 'todas', 'pagina' => 1, 'limite' => 50], RegistrationTrash::normalizeListParams([]));
+        $this->assertSame(
+            ['busca' => 'abc', 'filtro' => 'sem_backup', 'pagina' => 3, 'limite' => 100],
+            RegistrationTrash::normalizeListParams(['busca' => '  abc ', 'filtro' => 'sem_backup', 'pagina' => '3', 'limite' => 5000])
+        );
+        $this->assertSame(
+            ['busca' => '', 'filtro' => 'todas', 'pagina' => 1, 'limite' => 1],
+            RegistrationTrash::normalizeListParams(['filtro' => 'x; DROP', 'pagina' => -2, 'limite' => 0])
+        );
+        $this->assertSame(RegistrationTrash::MAX_SEARCH_LENGTH, mb_strlen(RegistrationTrash::normalizeListParams(['busca' => str_repeat('a', 5000)])['busca']));
+    }
+
+    function testEscapaCuringasDaBusca(): void
+    {
+        $this->assertSame('%100\\%\\_x\\\\%', RegistrationTrash::likePattern('100%_x\\'));
+    }
+
+    function testReconheceListaDeNumerosNaBusca(): void
+    {
+        $this->assertSame(['on-1', 'on-2', 'on-3'], RegistrationTrash::searchNumbers("on-1; 2,\non-3"));
+        $this->assertSame(['on-5'], RegistrationTrash::searchNumbers('on-5'));
+        $this->assertNull(RegistrationTrash::searchNumbers('12345678000190'), 'dígitos soltos buscam também no CNPJ');
+        $this->assertNull(RegistrationTrash::searchNumbers('on-1 LIX ORG'), 'texto misturado é busca livre');
+        $this->assertNull(RegistrationTrash::searchNumbers(''));
+        $this->assertCount(RegistrationTrash::MAX_NUMBERS, RegistrationTrash::searchNumbers(implode(';', range(1, 300))));
+
+        [$sql, $params] = RegistrationTrash::searchClause('on-1; on-2');
+        $this->assertSame('AND number IN (:numeros)', $sql);
+        $this->assertSame(['numeros' => ['on-1', 'on-2']], $params);
+    }
+
+    function testMontaBuscaComCnpjSoQuandoHaDigitos(): void
+    {
+        $this->assertSame(['', [], []], RegistrationTrash::searchClause(''));
+
+        [$sql, $params] = RegistrationTrash::searchClause('Associação');
+        $this->assertStringNotContainsString('digitos', $sql);
+        $this->assertSame(['busca' => '%Associação%'], $params);
+
+        [$sql, $params] = RegistrationTrash::searchClause('12.345.678/0001-90');
+        $this->assertStringContainsString(':digitos', $sql);
+        $this->assertSame('%12345678000190%', $params['digitos']);
+    }
+
     function testFiltroDoResumoSoAgeDentroDoGetSummary(): void
     {
         $this->assertTrue(RegistrationTrashSummaryFilter::calledFromSummary([

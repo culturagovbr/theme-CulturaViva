@@ -22,6 +22,14 @@ final class RegistrationTrash
     public const MAX_NUMBERS = 200;
     public const MIN_REASON_LENGTH = 10;
 
+    // listagem da lixeira
+    public const LIST_LIMIT = 50;
+    public const LIST_MAX_LIMIT = 100;
+    public const LIST_FILTERS = ['todas', 'restauraveis', 'sem_backup'];
+
+    // cabe uma lista colada de até MAX_NUMBERS números
+    public const MAX_SEARCH_LENGTH = 4000;
+
     public const ROLE = 'saasSuperAdmin';
 
     // nomes usados no Cadastro Nacional (mesmos do hook statusesNames do tema)
@@ -151,14 +159,31 @@ final class RegistrationTrash
                 $this->errorJson(i::__('Informe ao menos um número de inscrição.'), 400);
             }
 
+            if (count($parsed['numbers']) > self::MAX_NUMBERS) {
+                $this->errorJson(sprintf(i::__('Informe no máximo %d números por vez.'), self::MAX_NUMBERS), 400);
+            }
+
             $this->json(['itens' => self::restore($parsed['numbers'], $app->user)]);
+        });
+
+        $app->hook('POST(site.rcv-lixeira-restaurar-busca)', function () use ($app) {
+            /** @var \MapasCulturais\Controllers\Site $this */
+            self::requireManager($this);
+
+            $search = self::normalizeListParams($this->data)['busca'];
+
+            if ($search === '') {
+                $this->errorJson(i::__('Informe uma busca para restaurar em lote.'), 400);
+            }
+
+            $this->json(self::restoreBySearch($search, $app->user));
         });
 
         $app->hook('POST(site.rcv-lixeira-listar)', function () {
             /** @var \MapasCulturais\Controllers\Site $this */
             self::requireManager($this);
 
-            $this->json(['itens' => self::listTrashed()]);
+            $this->json(self::listTrashed($this->data));
         });
 
         $app->hook('panel.nav', function (&$nav_items) use ($app) {
@@ -715,38 +740,170 @@ final class RegistrationTrash
         }
     }
 
+    public static function normalizeListParams(array $data): array
+    {
+        $filter = (string) ($data['filtro'] ?? 'todas');
+
+        return [
+            'busca' => mb_substr(trim((string) ($data['busca'] ?? '')), 0, self::MAX_SEARCH_LENGTH),
+            'filtro' => in_array($filter, self::LIST_FILTERS, true) ? $filter : 'todas',
+            'pagina' => max(1, (int) ($data['pagina'] ?? 1)),
+            'limite' => min(self::LIST_MAX_LIMIT, max(1, (int) ($data['limite'] ?? self::LIST_LIMIT))),
+        ];
+    }
+
+    public static function likePattern(string $text): string
+    {
+        return '%' . addcslashes($text, '\\%_') . '%';
+    }
+
+    // lista de números colada na busca: vários números, ou um só com o prefixo on-
+    public static function searchNumbers(string $search): ?array
+    {
+        $tokens = preg_split('/[\s;,]+/', $search, -1, PREG_SPLIT_NO_EMPTY);
+        $parsed = self::parseNumbers($search);
+
+        if (!$parsed['numbers'] || $parsed['invalid'] || (count($tokens) < 2 && !preg_grep('/^on-/i', $tokens))) {
+            return null;
+        }
+
+        return array_slice($parsed['numbers'], 0, self::MAX_NUMBERS);
+    }
+
+    // busca por lista de números; ou por número, organização e motivo, e pelo CNPJ quando houver dígitos
+    public static function searchClause(string $search): array
+    {
+        if ($search === '') {
+            return ['', [], []];
+        }
+
+        if ($numbers = self::searchNumbers($search)) {
+            return ['AND number IN (:numeros)', ['numeros' => $numbers], ['numeros' => \Doctrine\DBAL\ArrayParameterType::STRING]];
+        }
+
+        $sql = 'number ILIKE :busca OR org_name ILIKE :busca OR motivo ILIKE :busca';
+        $params = ['busca' => self::likePattern($search)];
+
+        $digits = preg_replace('/\D/', '', $search);
+        if ($digits !== '') {
+            $sql .= " OR regexp_replace(COALESCE(cnpj, ''), '\D', '', 'g') LIKE :digitos";
+            $params['digitos'] = self::likePattern($digits);
+        }
+
+        return ["AND ({$sql})", $params, []];
+    }
+
+    // inscrições da primeira fase na lixeira, uma linha por inscrição, com a primeira organização vinculada
+    private static function trashedBaseQuery(): array
+    {
+        $sql = "
+            WITH base AS (
+                SELECT r.id, r.number, r.category, m.value AS record, org.name AS org_name, org.cnpj,
+                       (m.value IS NOT NULL AND NOT jsonb_exists(m.value::jsonb, 'restaurada')) AS restauravel,
+                       m.value::jsonb ->> 'data' AS enviada_em,
+                       m.value::jsonb ->> 'motivo' AS motivo
+                FROM registration r
+                LEFT JOIN registration_meta m ON m.object_id = r.id AND m.key = :meta
+                LEFT JOIN LATERAL (
+                    SELECT a.name, (SELECT am.value FROM agent_meta am WHERE am.object_id = a.id AND am.key = 'cnpj' LIMIT 1) AS cnpj
+                    FROM agent_relation ar
+                    JOIN agent a ON a.id = ar.agent_id
+                    WHERE ar.object_id = r.id AND ar.object_type = :type AND ar.type = 'coletivo'
+                    ORDER BY ar.id
+                    LIMIT 1
+                ) org ON true
+                WHERE r.opportunity_id = :main AND r.status = :status
+            )
+        ";
+
+        return [$sql, ['meta' => self::META, 'type' => self::REGISTRATION_CLASS, 'main' => App::i()->config['rcv.opportunityId'], 'status' => self::STATUS]];
+    }
+
     /**
-     * Inscrições da primeira fase na lixeira, com o registro de quem enviou
+     * Restaura as restauráveis encontradas pela busca, até o limite por lote
      */
-    public static function listTrashed(): array
+    public static function restoreBySearch(string $search, User $user, int $limit = self::MAX_NUMBERS): array
+    {
+        $conn = App::i()->em->getConnection();
+        [$base, $bind] = self::trashedBaseQuery();
+        [$search_sql, $search_bind, $search_types] = self::searchClause($search);
+
+        $numbers = $conn->fetchFirstColumn("
+            {$base}
+            SELECT number FROM base
+            WHERE restauravel {$search_sql}
+            ORDER BY enviada_em DESC NULLS LAST, id DESC
+            LIMIT :limite
+        ", $bind + $search_bind + ['limite' => $limit], $search_types + ['limite' => \Doctrine\DBAL\ParameterType::INTEGER]);
+
+        $results = $numbers ? self::restore($numbers, $user) : [];
+        $remaining = (int) $conn->fetchOne("{$base} SELECT count(*) FROM base WHERE restauravel {$search_sql}", $bind + $search_bind, $search_types);
+
+        return ['itens' => $results, 'restantes' => $remaining];
+    }
+
+    /**
+     * Inscrições da primeira fase na lixeira, paginadas, com busca e filtro
+     */
+    public static function listTrashed(array $data = []): array
     {
         $app = App::i();
         $conn = $app->em->getConnection();
+        $params = self::normalizeListParams($data);
+
+        [$base, $bind] = self::trashedBaseQuery();
+
+        [$search_sql, $search_bind, $search_types] = self::searchClause($params['busca']);
+        $filter_sql = ['restauraveis' => 'AND restauravel', 'sem_backup' => 'AND NOT restauravel'][$params['filtro']] ?? '';
+
+        $totals = array_map('intval', $conn->fetchAssociative("
+            {$base}
+            SELECT count(*) AS todas, count(*) FILTER (WHERE restauravel) AS restauraveis, count(*) FILTER (WHERE NOT restauravel) AS sem_backup
+            FROM base WHERE true {$search_sql}
+        ", $bind + $search_bind, $search_types));
 
         $rows = $conn->fetchAllAssociative("
-            SELECT r.id, r.number, r.category, m.value AS record, a.name AS org_name
-            FROM registration r
-            LEFT JOIN registration_meta m ON m.object_id = r.id AND m.key = :meta
-            LEFT JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = :type AND ar.type = 'coletivo'
-            LEFT JOIN agent a ON a.id = ar.agent_id
-            WHERE r.opportunity_id = :main AND r.status = :status
-            ORDER BY r.id DESC
-        ", ['meta' => self::META, 'type' => self::REGISTRATION_CLASS, 'main' => $app->config['rcv.opportunityId'], 'status' => self::STATUS]);
+            {$base}
+            SELECT * FROM base
+            WHERE true {$search_sql} {$filter_sql}
+            ORDER BY (CASE WHEN restauravel THEN enviada_em END) DESC NULLS LAST, id DESC
+            LIMIT :limite OFFSET :deslocamento
+        ", $bind + $search_bind + [
+            'limite' => $params['limite'],
+            'deslocamento' => ($params['pagina'] - 1) * $params['limite'],
+        ], $search_types + ['limite' => \Doctrine\DBAL\ParameterType::INTEGER, 'deslocamento' => \Doctrine\DBAL\ParameterType::INTEGER]);
 
-        $records = array_map(fn ($row) => self::hasUsableRecord($row['record']) ? json_decode($row['record'], true) : null, $rows);
+        $records = array_map(fn ($row) => $row['restauravel'] ? json_decode($row['record'], true) : null, $rows);
         $names = self::fetchUserNames(array_filter(array_map(fn ($record) => $record['usuario'] ?? null, $records)));
+        $total = $totals[$params['filtro']];
 
-        return array_map(fn ($row, $record) => [
-            'numero' => $row['number'],
-            'id' => (int) $row['id'],
-            'categoria' => $row['category'],
-            'organizacao' => $row['org_name'],
-            'status_anterior' => $record ? self::statusName((int) $record['status']) : null,
-            'enviada_por' => $record ? ($names[$record['usuario']] ?? "#{$record['usuario']}") : null,
-            'enviada_em' => $record['data'] ?? null,
-            'motivo' => $record['motivo'] ?? null,
-            'restauravel' => (bool) $record,
-        ], $rows, $records);
+        // com lista colada, informa os números que não estão na lixeira
+        $searched = self::searchNumbers($params['busca']);
+        $missing = $searched ? array_values(array_diff($searched, $conn->fetchFirstColumn(
+            "{$base} SELECT number FROM base WHERE number IN (:numeros)",
+            $bind + ['numeros' => $searched],
+            ['numeros' => \Doctrine\DBAL\ArrayParameterType::STRING]
+        ))) : [];
+
+        return [
+            'itens' => array_map(fn ($row, $record) => [
+                'numero' => $row['number'],
+                'id' => (int) $row['id'],
+                'categoria' => $row['category'],
+                'organizacao' => $row['org_name'],
+                'status_anterior' => $record ? self::statusName((int) $record['status']) : null,
+                'enviada_por' => $record ? ($names[$record['usuario']] ?? "#{$record['usuario']}") : null,
+                'enviada_em' => $record['data'] ?? null,
+                'motivo' => $record['motivo'] ?? null,
+                'restauravel' => (bool) $record,
+            ], $rows, $records),
+            'total' => $total,
+            'totais' => $totals,
+            'pagina' => $params['pagina'],
+            'paginas' => max(1, (int) ceil($total / $params['limite'])),
+            'numeros_buscados' => $searched ? count($searched) : 0,
+            'fora_da_lixeira' => $missing,
+        ];
     }
 
     public static function clearTrashedValuers(int $opportunity_id): int

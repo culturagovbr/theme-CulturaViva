@@ -135,73 +135,141 @@ $this->import('
                 <template #content>
                     <p class="rcv-registration-trash__lead">{{ text('explicacaoLixeira') }}</p>
 
-                    <mc-loading :condition="carregando"></mc-loading>
+                    <form class="rcv-registration-trash__filtros" @submit.prevent>
+                        <div class="field">
+                            <label for="rcv-lixeira-busca"><?= i::__('Buscar') ?></label>
+                            <textarea id="rcv-lixeira-busca" v-model="busca" rows="3" :placeholder="text('buscarPlaceholder')" @input="buscar()"></textarea>
+                            <small class="rcv-registration-trash__hint">{{ text('dicaBusca') }}</small>
+                        </div>
+                    </form>
+
+                    <mc-alert type="warning" v-if="foraDaLixeira.length">
+                        {{ formatar('foraDaLixeira', foraDaLixeira.length, numerosBuscados, foraDaLixeira.join(', ')) }}
+                    </mc-alert>
+
+                    <div class="rcv-registration-trash__pilulas" role="group" :aria-label="text('filtrar')">
+                        <button
+                            v-for="opcao in filtros"
+                            :key="opcao"
+                            type="button"
+                            class="rcv-registration-trash__pilula"
+                            :class="{'rcv-registration-trash__pilula--ativa': filtro === opcao}"
+                            :aria-pressed="filtro === opcao"
+                            @click="escolherFiltro(opcao)">
+                            {{ text('filtro_' + opcao) }} <strong>{{ totais[opcao] || 0 }}</strong>
+                        </button>
+                    </div>
+
+                    <!-- lote: todas as restauráveis encontradas pela busca, além da página -->
+                    <div class="rcv-registration-trash__lote" v-if="loteDisponivel">
+                        <span v-if="numerosBuscados">{{ formatar('loteResumoLista', totais.restauraveis, numerosBuscados) }}</span>
+                        <span v-else>{{ formatar('loteResumo', totais.restauraveis) }}</span>
+
+                        <mc-modal classes="rcv-registration-trash__modal" :title="text('loteTitulo')">
+                            <template #default>
+                                <p v-if="numerosBuscados">{{ formatar('loteConfirmacaoLista', loteTamanho, numerosBuscados) }}</p>
+                                <p v-else>{{ formatar('loteConfirmacao', loteTamanho, busca) }}</p>
+                                <p class="rcv-registration-trash__hint" v-if="totais.restauraveis > limite">{{ formatar('loteTeto', limite, totais.restauraveis) }}</p>
+                            </template>
+
+                            <template #actions="modal">
+                                <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
+                                <button class="button button--primary button--md" :disabled="carregando" @click="restaurarBusca(modal)"><?= i::__('Confirmar') ?></button>
+                            </template>
+
+                            <template #button="modal">
+                                <button type="button" class="button button--primary-outline button--sm" @click="modal.open()">
+                                    <mc-icon name="history"></mc-icon>
+                                    {{ formatar('loteBotao', loteTamanho) }}
+                                </button>
+                            </template>
+                        </mc-modal>
+                    </div>
+
+                    <div class="rcv-registration-trash__acoes" v-if="lista.length || selecionados.length">
+                        <label class="rcv-registration-trash__selecionar-todas">
+                            <input type="checkbox" :checked="carregadasSelecionadas" :disabled="!restauraveis.length" @change="alternarCarregadas()">
+                            {{ text('selecionarCarregadas') }}
+                        </label>
+
+                        <div class="rcv-registration-trash__resumo">
+                            <span class="rcv-registration-trash__contador">{{ formatar('selecionadas', selecionados.length) }}</span>
+                            <span class="rcv-registration-trash__limite" v-if="acimaDoLimite">{{ formatar('acimaDoLimite', limite) }}</span>
+
+                            <button type="button" class="button button--text button--sm" v-if="selecionados.length" @click="limparSelecao()">
+                                {{ text('limparSelecao') }}
+                            </button>
+
+                            <mc-modal classes="rcv-registration-trash__modal" :title="text('restaurarTitulo')">
+                                <template #default>
+                                    <p>{{ formatar('restaurarConfirmacao', selecionados.length) }}</p>
+                                </template>
+
+                                <template #actions="modal">
+                                    <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
+                                    <button class="button button--primary button--md" :disabled="carregando" @click="restaurar(modal)"><?= i::__('Confirmar') ?></button>
+                                </template>
+
+                                <template #button="modal">
+                                    <button type="button" class="button button--primary button--sm" :disabled="!selecionados.length || acimaDoLimite" @click="modal.open()">
+                                        <mc-icon name="history"></mc-icon>
+                                        {{ formatar('restaurarBotao', selecionados.length) }}
+                                    </button>
+                                </template>
+                            </mc-modal>
+                        </div>
+                    </div>
+
+                    <mc-loading :condition="carregando && !lista.length"></mc-loading>
 
                     <div class="rcv-registration-trash__vazio" v-if="!lista.length && !carregando">
                         <mc-icon name="trash"></mc-icon>
-                        <p>{{ text('lixeiraVazia') }}</p>
+
+                        <template v-if="filtroAtivo">
+                            <p>{{ text('nadaEncontrado') }}</p>
+                            <button type="button" class="button button--primary-outline button--sm" @click="limparFiltros()">{{ text('limparFiltros') }}</button>
+                        </template>
+
+                        <p v-else>{{ text('lixeiraVazia') }}</p>
                     </div>
 
-                    <template v-if="lista.length && !carregando">
-                        <div class="rcv-registration-trash__acoes">
-                            <label class="rcv-registration-trash__selecionar-todas">
-                                <input type="checkbox" :checked="todosSelecionados" :disabled="!restauraveis.length" @change="alternarTodos()">
-                                {{ text('selecionarTodas') }}
-                            </label>
+                    <ul class="rcv-registration-trash__lista" v-if="lista.length">
+                        <li v-for="item in lista" :key="item.numero" class="rcv-trash-item" :class="{'rcv-trash-item--bloqueado': !item.restauravel}">
+                            <div class="rcv-trash-item__linha">
+                                <label class="rcv-trash-item__selecao">
+                                    <input type="checkbox" :value="item.numero" v-model="selecionados" :disabled="!item.restauravel" :aria-label="formatar('selecionar', item.numero)">
+                                </label>
 
-                            <div class="rcv-registration-trash__resumo">
-                                <span class="rcv-registration-trash__contador">{{ formatar('selecionadas', selecionados.length) }}</span>
+                                <div class="rcv-trash-item__info">
+                                    <h4 class="rcv-trash-item__numero">
+                                        <a :href="urlInscricao(item.id)" target="_blank">{{ item.numero }}</a>
+                                    </h4>
 
-                                <mc-modal classes="rcv-registration-trash__modal" :title="text('restaurarTitulo')">
-                                    <template #default>
-                                        <p>{{ formatar('restaurarConfirmacao', selecionados.length) }}</p>
-                                    </template>
+                                    <p class="rcv-trash-item__meta">
+                                        <span v-if="item.organizacao">{{ item.organizacao }}</span>
+                                        <span>{{ item.categoria }}</span>
+                                        <span v-if="item.status_anterior">{{ formatar('statusAnterior', item.status_anterior) }}</span>
+                                    </p>
 
-                                    <template #actions="modal">
-                                        <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
-                                        <button class="button button--primary button--md" :disabled="carregando" @click="restaurar(modal)"><?= i::__('Confirmar') ?></button>
-                                    </template>
-
-                                    <template #button="modal">
-                                        <button type="button" class="button button--primary button--sm" :disabled="!selecionados.length" @click="modal.open()">
-                                            <mc-icon name="history"></mc-icon>
-                                            {{ formatar('restaurarBotao', selecionados.length) }}
-                                        </button>
-                                    </template>
-                                </mc-modal>
-                            </div>
-                        </div>
-
-                        <ul class="rcv-registration-trash__lista">
-                            <li v-for="item in lista" :key="item.numero" class="rcv-trash-item" :class="{'rcv-trash-item--bloqueado': !item.restauravel}">
-                                <div class="rcv-trash-item__linha">
-                                    <label class="rcv-trash-item__selecao">
-                                        <input type="checkbox" :value="item.numero" v-model="selecionados" :disabled="!item.restauravel" :aria-label="formatar('selecionar', item.numero)">
-                                    </label>
-
-                                    <div class="rcv-trash-item__info">
-                                        <h4 class="rcv-trash-item__numero">
-                                            <a :href="urlInscricao(item.id)" target="_blank">{{ item.numero }}</a>
-                                        </h4>
-
-                                        <p class="rcv-trash-item__meta">
-                                            <span v-if="item.organizacao">{{ item.organizacao }}</span>
-                                            <span>{{ item.categoria }}</span>
-                                            <span v-if="item.status_anterior">{{ formatar('statusAnterior', item.status_anterior) }}</span>
-                                        </p>
-
-                                        <p class="rcv-trash-item__motivo" v-if="item.motivo">{{ item.motivo }}</p>
-                                        <p class="rcv-trash-item__motivo rcv-registration-trash__muted" v-if="!item.restauravel">{{ text('sem_backup') }}</p>
-                                    </div>
-
-                                    <div class="rcv-trash-item__situacao" v-if="item.enviada_por">
-                                        <span>{{ item.enviada_por }}</span>
-                                        <small>{{ quando(item.enviada_em) }}</small>
-                                    </div>
+                                    <p class="rcv-trash-item__motivo" v-if="item.motivo">{{ item.motivo }}</p>
+                                    <p class="rcv-trash-item__motivo rcv-registration-trash__muted" v-if="!item.restauravel">{{ text('sem_backup') }}</p>
                                 </div>
-                            </li>
-                        </ul>
-                    </template>
+
+                                <div class="rcv-trash-item__situacao" v-if="item.enviada_por">
+                                    <span>{{ item.enviada_por }}</span>
+                                    <small>{{ quando(item.enviada_em) }}</small>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <div class="rcv-registration-trash__mais" v-if="lista.length">
+                        <span class="rcv-registration-trash__hint">{{ formatar('exibindo', lista.length, total) }}</span>
+
+                        <button type="button" class="button button--large button--primary-outline" v-if="pagina < paginas" :disabled="carregando" @click="carregarMais()">
+                            <?= i::__('Carregar mais') ?>
+                        </button>
+                    </div>
                 </template>
             </mc-card>
         </mc-tab>

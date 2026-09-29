@@ -7,6 +7,11 @@
         margin-bottom: 1.5rem;
     }
 
+    // o painel das abas tem fundo cinza: sem margem abaixo do último bloco
+    .tab-component > :last-child {
+        margin-bottom: 0;
+    }
+
     // empilha na largura inteira
     .mc-card__content {
         flex-direction: column;
@@ -56,6 +61,73 @@
     }
 
     &__motivo {
+        margin-top: 1.5rem;
+    }
+
+    &__filtros {
+        margin-bottom: 1rem;
+
+        input {
+            width: 100%;
+        }
+    }
+
+    &__pilulas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-bottom: 1rem;
+
+        .rcv-registration-trash__pilula {
+            background: transparent;
+            cursor: pointer;
+
+            &:focus,
+            &:hover {
+                background: var(--mc-gray-100, #fafafa);
+            }
+        }
+
+        .rcv-registration-trash__pilula--ativa,
+        .rcv-registration-trash__pilula--ativa:focus,
+        .rcv-registration-trash__pilula--ativa:hover {
+            border-color: var(--mc-primary-500, #0a72e8);
+            background: var(--mc-primary-500, #0a72e8);
+            color: #fff;
+        }
+    }
+
+    // barra do lote: texto à esquerda e ação à direita
+    &__lote {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        border: var(--mc-border-hairline) var(--mc-gray-300);
+        border-radius: var(--mc-border-radius-sm);
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xs);
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+    }
+
+    &__limite {
+        color: var(--mc-danger-500, #b7292e);
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    &__mais {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
         margin-top: 1.5rem;
     }
 

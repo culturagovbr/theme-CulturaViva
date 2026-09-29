@@ -265,9 +265,86 @@ class RegistrationTrashIntegrationTest extends TestCase
         $this->assertSame(['ignorada', ['sem_backup']], [$result[0]['resultado'], $result[0]['motivos']]);
         $this->assertSame(-10, (int) $this->conn()->fetchOne("SELECT status FROM registration WHERE id = ?", [$registration['id']]));
 
-        $listed = array_values(array_filter(RegistrationTrash::listTrashed(), fn ($item) => $item['numero'] === $registration['number']))[0];
+        $listed = RegistrationTrash::listTrashed(['busca' => $registration['number']])['itens'][0];
         $this->assertFalse($listed['restauravel']);
         $this->assertNull($listed['motivo']);
+    }
+
+    function testListaPaginadaComBuscaEFiltro(): void
+    {
+        $app = self::$app;
+        $rows = $this->conn()->fetchAllAssociative("
+            SELECT DISTINCT r.id, r.number
+            FROM registration r
+            JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = 'MapasCulturais\\Entities\\Registration' AND ar.type = 'coletivo'
+            WHERE r.opportunity_id = ? AND r.status > 0
+            ORDER BY r.id LIMIT 4
+        ", [$this->mainOpportunityId()]);
+
+        if (count($rows) < 4) {
+            $this->markTestSkipped('Menos de quatro inscrições ativas com organização.');
+        }
+
+        $this->conn()->executeStatement(
+            "UPDATE registration SET status = 1 WHERE id IN (?, ?, ?, ?)",
+            array_map(fn ($row) => $row['id'], $rows)
+        );
+
+        // três pela ferramenta, com motivo único; a quarta fora dela, sem backup
+        $reason = 'lote de integração ' . uniqid();
+        RegistrationTrash::trash(array_column(array_slice($rows, 0, 3), 'number'), $reason, $app->repo('User')->find($this->firstUserId()));
+        $this->conn()->executeStatement("UPDATE registration SET status = -10 WHERE number = ?", [$rows[3]['number']]);
+
+        $page1 = RegistrationTrash::listTrashed(['busca' => $reason, 'limite' => 2]);
+        $page2 = RegistrationTrash::listTrashed(['busca' => $reason, 'limite' => 2, 'pagina' => 2]);
+        $this->assertSame([3, 2, 2, 1], [$page1['total'], $page1['paginas'], count($page1['itens']), count($page2['itens'])]);
+        $this->assertEmpty(array_intersect(array_column($page1['itens'], 'numero'), array_column($page2['itens'], 'numero')), 'páginas sem repetição');
+        $this->assertSame(['todas' => 3, 'restauraveis' => 3, 'sem_backup' => 0], $page1['totais']);
+
+        $byNumber = RegistrationTrash::listTrashed(['busca' => $rows[0]['number']]);
+        $this->assertSame([$rows[0]['number']], array_column($byNumber['itens'], 'numero'));
+
+        $withoutBackup = RegistrationTrash::listTrashed(['busca' => $rows[3]['number'], 'filtro' => 'sem_backup']);
+        $this->assertSame([1, false], [$withoutBackup['total'], $withoutBackup['itens'][0]['restauravel']]);
+        $this->assertSame(0, RegistrationTrash::listTrashed(['busca' => $rows[3]['number'], 'filtro' => 'restauraveis'])['total']);
+    }
+
+    function testRestauraEmLotePelaBuscaRespeitandoOLimite(): void
+    {
+        $app = self::$app;
+        $rows = $this->conn()->fetchAllAssociative("
+            SELECT DISTINCT r.id, r.number
+            FROM registration r
+            JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = 'MapasCulturais\\Entities\\Registration' AND ar.type = 'coletivo'
+            WHERE r.opportunity_id = ? AND r.status > 0
+            ORDER BY r.id LIMIT 3
+        ", [$this->mainOpportunityId()]);
+
+        if (count($rows) < 3) {
+            $this->markTestSkipped('Menos de três inscrições ativas com organização.');
+        }
+
+        $this->conn()->executeStatement("UPDATE registration SET status = 1 WHERE id IN (?, ?, ?)", array_column($rows, 'id'));
+        $user = $app->repo('User')->find($this->firstUserId());
+        $reason = 'lote por busca ' . uniqid();
+        RegistrationTrash::trash(array_column($rows, 'number'), $reason, $user);
+
+        $first = RegistrationTrash::restoreBySearch($reason, $user, 2);
+        $this->assertSame([2, 1], [count($first['itens']), $first['restantes']]);
+
+        $second = RegistrationTrash::restoreBySearch($reason, $user, 2);
+        $this->assertSame([1, 0], [count($second['itens']), $second['restantes']]);
+        $this->assertSame(0, (int) $this->conn()->fetchOne("SELECT count(*) FROM registration WHERE number IN (?, ?, ?) AND status = -10", array_column($rows, 'number')));
+
+        // lista colada: só os números da lista, e aviso do que não está na lixeira
+        RegistrationTrash::trash(array_column($rows, 'number'), $reason, $user);
+        $pasted = "{$rows[0]['number']};\n{$rows[1]['number']}, on-999999999";
+        $listed = RegistrationTrash::listTrashed(['busca' => $pasted]);
+        $this->assertSame([2, 3, ['on-999999999']], [$listed['total'], $listed['numeros_buscados'], $listed['fora_da_lixeira']]);
+
+        $byList = RegistrationTrash::restoreBySearch($pasted, $user);
+        $this->assertSame([2, 0], [count($byList['itens']), $byList['restantes']]);
+        $this->assertSame(-10, (int) $this->conn()->fetchOne("SELECT status FROM registration WHERE number = ? AND opportunity_id = ?", [$rows[2]['number'], $this->mainOpportunityId()]), 'fora da lista continua na lixeira');
     }
 
     function testBloqueiaUnicaCertificacaoDaOrganizacao(): void
