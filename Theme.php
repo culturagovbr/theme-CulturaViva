@@ -2231,7 +2231,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             if($app->view->controller){
                 $opportunity = $app->view->controller->requestedEntity;
     
-                if($opportunity->id == $app->config['rcv.opportunityId']){
+                if($opportunity?->id == $app->config['rcv.opportunityId']){
                     $status = [
                         10 => "Habilitado", 
                         3 => "Inabilitado",
