@@ -1195,6 +1195,7 @@ class Importer {
         ];
 
         $cleared_agent_ids = [];
+        $planned_organizations = [];
 
         foreach ($data_range as $index => $raw_row) {
             $line     = $index + 1;
@@ -1206,6 +1207,8 @@ class Importer {
                 $cleared_agent_ids[$agent_id] = true;
             }
 
+            self::reconcileWithPlannedRows($decision, $planned_organizations);
+
             $plan['rows'][] = $decision;
 
             $app->log->debug("Fase A: linha {$line} → cenário {$decision['scenario']}");
@@ -1213,6 +1216,50 @@ class Importer {
 
         $app->log->info("Fase A: {$plan['total_rows']} linhas resolvidas.");
         return $plan;
+    }
+
+    /**
+     * Ajusta a linha quando a mesma organização já vai ser criada por uma linha anterior da planilha.
+     * Mesmo CPF e categoria: linha ignorada. Mesmo CPF, outra categoria: inscrição na organização da
+     * linha anterior. Outro CPF: Cenário 5.
+     *
+     * @param array $decision decisão da linha, já resolvida contra o banco
+     * @param array $planned organizações que linhas anteriores vão criar, por CNPJ (ou nome + CPF, no coletivo)
+     */
+    private static function reconcileWithPlannedRows(array &$decision, array &$planned): void {
+        if (!in_array($decision['scenario'], [2, 3.1, 4], true)) {
+            return;
+        }
+
+        $app = App::i();
+        $row = $decision['row'];
+        $cpf = preg_replace('/\D/', '', (string) $row->responsavel_cpf);
+        $key = $row->organizacao_cnpj
+            ? 'cnpj:' . preg_replace('/\D/', '', $row->organizacao_cnpj)
+            : 'coletivo:' . $app->slugify((string) $row->organizacao_nome) . ':' . $cpf;
+
+        if (!isset($planned[$key])) {
+            $planned[$key] = ['line' => $decision['line'], 'cpf' => $cpf, 'categories' => [$row->ponto_tipo => true]];
+            return;
+        }
+
+        $first = $planned[$key];
+        $decision['deferred'] = ['clear_cpf_agent_ids' => [], 'set_org_cnpj' => null];
+        $decision['registration_id'] = null;
+
+        if ($first['cpf'] !== $cpf) {
+            $decision['scenario'] = 5;
+            $decision['organization_id'] = null;
+            $decision['email']['scenario5_reason'] = 'diferente';
+        } elseif (isset($first['categories'][$row->ponto_tipo])) {
+            $decision['scenario'] = null;
+            $decision['duplicate_of_line'] = $first['line'];
+        } else {
+            $decision['scenario'] = 2;
+            $decision['organization_id'] = null;
+            $decision['organization_from_line'] = $first['line'];
+            $planned[$key]['categories'][$row->ponto_tipo] = true;
+        }
     }
 
     /** 
@@ -1884,8 +1931,21 @@ class Importer {
         $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
         $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
 
+        $organization_by_line = [];
+
         foreach ($plan['rows'] as $i => &$decision) {
             $line = $decision['line'];
+
+            if ($decision['scenario'] === null) {
+                self::generateImporterLog($pnab_reg,
+                    "[{$line}/{$total}] Linha ignorada: repete a linha {$decision['duplicate_of_line']}");
+                $decision = ['line' => $line, 'scenario' => null, 'email' => $decision['email'] ?? []];
+                continue;
+            }
+
+            if (isset($decision['organization_from_line'])) {
+                $decision['organization_id'] = $organization_by_line[$decision['organization_from_line']] ?? null;
+            }
 
             try {
                 // Ajustes diferidos da Fase A
@@ -1893,6 +1953,8 @@ class Importer {
 
                 // Aplicação do cenário
                 self::applyScenario($decision, $importer_seal, $waiting_seal, $pnab_reg);
+
+                $organization_by_line[$line] = $decision['organization_id'] ?? null;
 
                 $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
 
