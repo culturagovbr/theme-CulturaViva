@@ -540,6 +540,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         // Pré-validação CNPJ: inscrições RCV (coletivo + meta). Alterar CNPJ: excludeAgentId + categoria pelo coletivo.
         // Novo cadastro: opcional subscriptionType ponto-entidade|pontao (bloqueia só essa modalidade se já existir).
         // Sem subscriptionType: só bloqueia “lotado” (já tem Ponto e Pontão) ou 2+ Pontões — não bloqueia só por vários Pontos (ex.: permite seguir para Pontão no curl/UI legada).
+        // Em qualquer caso, bloqueia CNPJ já vinculado a responsável com outro CPF.
         $app->hook('POST(site.check-cnpj-org-conflict)', function () use ($app, $theme) {
             $this->requireAuthentication();
 
@@ -568,18 +569,16 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     $categoryLabel = $pontaoLabel;
                 }
 
-                if ($categoryLabel === null || $categoryLabel === '') {
-                    $this->json(['conflict' => false]);
+                $conflict = $categoryLabel
+                    ? $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
+                        $app,
+                        $cnpjDigits,
+                        $categoryLabel,
+                        $excludeAgentId
+                    ) > 0
+                    : false;
 
-                    return;
-                }
-
-                $conflict = $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
-                    $app,
-                    $cnpjDigits,
-                    $categoryLabel,
-                    $excludeAgentId
-                ) > 0;
+                $responsibleId = $app->repo('Agent')->find($excludeAgentId)?->owner?->id;
             } else {
                 $nPonto = $theme->countRcvRegistrationsWithColetivoCnpjAndCategory(
                     $app,
@@ -602,6 +601,17 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 } else {
                     $conflict = $nPontao >= 2 || ($nPonto >= 1 && $nPontao >= 1);
                 }
+
+                $responsibleId = $app->user->profile?->id;
+            }
+
+            if (!$conflict) {
+                $conflict = $theme->countRcvRegistrationsWithColetivoCnpjFromOtherResponsible(
+                    $app,
+                    $cnpjDigits,
+                    $responsibleId,
+                    $excludeAgentId
+                ) > 0;
             }
 
             $this->json(['conflict' => $conflict]);
@@ -2261,8 +2271,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             }
         });
 
-        // Bloqueia no servidor o envio de cadastro com CNPJ já certificado na mesma categoria
-        $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app) {
+        // Bloqueia no servidor o envio de cadastro com CNPJ já cadastrado na mesma categoria ou por responsável com outro CPF
+        $app->hook('entity(Registration).sendValidationErrors', function(&$errorsResult) use ($app, $theme) {
             /** @var \MapasCulturais\Entities\Registration $this */
             if ($this->opportunity->id !== (int) $app->config['rcv.opportunityId']) {
                 return;
@@ -2291,20 +2301,29 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                     AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
                 WHERE r.opportunity_id = :oppId
                   AND r.category = :category
-                  AND r.status != :trash
+                  AND r.status > 0
                   AND r.status != :notApproved
                   AND r.id != :selfId
             ", [
                 'digits'      => $cnpjDigits,
                 'category'    => $this->category,
                 'oppId'       => (int) $app->config['rcv.opportunityId'],
-                'trash'       => Registration::STATUS_TRASH,
                 'notApproved' => Registration::STATUS_NOTAPPROVED,
                 'selfId'      => $this->id,
             ]);
 
+            if ((int) $count === 0) {
+                $count = $theme->countRcvRegistrationsWithColetivoCnpjFromOtherResponsible(
+                    $app,
+                    $cnpjDigits,
+                    $this->owner?->id,
+                    null,
+                    $this->id
+                );
+            }
+
             if ((int) $count > 0) {
-                $errorsResult['agent_cnpj'] = [i::__('Já existe um cadastro certificado com este CNPJ nesta categoria.')];
+                $errorsResult['agent_cnpj'] = [i::__('Este CNPJ já possui cadastro/certificação na plataforma. Caso tenha ocorrido alteração de representação legal ou responsável, solicite a atualização/vínculo dos dados cadastrais junto ao suporte/gestão da plataforma.')];
             }
         });
 
@@ -3414,7 +3433,6 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             'digits' => $cnpjDigits,
             'category' => $categoryLabel,
             'oppId' => $opportunityId,
-            'trash' => Registration::STATUS_TRASH,
             'notApproved' => Registration::STATUS_NOTAPPROVED,
         ];
         $excludeSql = '';
@@ -3434,7 +3452,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
             WHERE r.opportunity_id = :oppId
               AND r.category = :category
-              AND r.status != :trash
+              AND r.status > 0
               AND r.status != :notApproved
             {$excludeSql}
         ";
@@ -3442,6 +3460,76 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         $count = $conn->fetchFirstColumn($sql, $params);
 
         return (int) ($count[0] ?? 0);
+    }
+
+    /**
+     * Inscrições na oportunidade Cultura Viva cujo agente coletivo tem o CNPJ e um responsável atual com CPF diferente do CPF do agente informado, em qualquer categoria.
+     */
+    public function countRcvRegistrationsWithColetivoCnpjFromOtherResponsible(
+        App $app,
+        string $cnpjDigits,
+        ?int $responsibleAgentId,
+        ?int $excludeColetivoAgentId = null,
+        ?int $excludeRegistrationId = null
+    ): int {
+        $conn = $app->em->getConnection();
+        $registrationObjectType = Registration::class;
+
+        $responsibleCpfDigits = $responsibleAgentId ? (string) $conn->fetchOne("
+            SELECT regexp_replace(value, '[^0-9]', '', 'g')
+            FROM agent_meta
+            WHERE object_id = :agentId AND key IN ('cpf', 'documento') AND COALESCE(value, '') <> ''
+            ORDER BY (key = 'cpf') DESC
+            LIMIT 1
+        ", ['agentId' => $responsibleAgentId]) : '';
+
+        $params = [
+            'digits' => $cnpjDigits,
+            'oppId' => (int) $app->config['rcv.opportunityId'],
+            'notApproved' => Registration::STATUS_NOTAPPROVED,
+        ];
+
+        $sameResponsibleSql = '';
+        if (strlen($responsibleCpfDigits) === 11) {
+            $sameResponsibleSql = "
+              AND NOT EXISTS (
+                  SELECT 1 FROM agent_meta oc
+                  WHERE oc.object_id = COALESCE(org.parent_id, org_user.profile_id)
+                    AND oc.key IN ('cpf', 'documento')
+                    AND regexp_replace(COALESCE(oc.value, ''), '[^0-9]', '', 'g') = :cpf
+              )";
+            $params['cpf'] = $responsibleCpfDigits;
+        }
+
+        $excludeSql = '';
+        if ($excludeColetivoAgentId !== null) {
+            $excludeSql .= ' AND ar.agent_id <> :excludeAgentId';
+            $params['excludeAgentId'] = $excludeColetivoAgentId;
+        }
+        if ($excludeRegistrationId !== null) {
+            $excludeSql .= ' AND r.id <> :excludeRegistrationId';
+            $params['excludeRegistrationId'] = $excludeRegistrationId;
+        }
+
+        $sql = "
+            SELECT COUNT(DISTINCT r.id)
+            FROM registration r
+            INNER JOIN agent_relation ar ON ar.object_id = r.id
+                AND ar.object_type = '{$registrationObjectType}'
+                AND ar.type = 'coletivo'
+            INNER JOIN agent_meta am ON am.object_id = ar.agent_id
+                AND am.key IN ('cnpj', 'documento')
+                AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
+            INNER JOIN agent org ON org.id = ar.agent_id
+            LEFT JOIN usr org_user ON org_user.id = org.user_id
+            WHERE r.opportunity_id = :oppId
+              AND r.status > 0
+              AND r.status != :notApproved
+            {$sameResponsibleSql}
+            {$excludeSql}
+        ";
+
+        return (int) $conn->fetchOne($sql, $params);
     }
 
     public function sendMailRegistrationPnabDenied(Registration $registration) {
