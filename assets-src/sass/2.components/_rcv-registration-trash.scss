@@ -1,0 +1,254 @@
+/** Lixeira de inscrições no painel. */
+.rcv-registration-trash {
+    width: 100%;
+
+    .mc-card,
+    .alert {
+        margin-bottom: 1.5rem;
+    }
+
+    // empilha na largura inteira
+    .mc-card__content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    &__tabs {
+        margin-bottom: 1.5rem;
+    }
+
+    &__lead {
+        max-width: 72ch;
+        margin: 0 0 1.5rem;
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xs);
+    }
+
+    &__hint {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--mc-gray-500);
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    &__muted {
+        color: var(--mc-gray-500);
+        font-style: italic;
+    }
+
+    &__barra {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        margin-top: 1rem;
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    &__motivo {
+        margin-top: 1.5rem;
+    }
+
+    // totais por situação
+    &__contagem {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-bottom: 1rem;
+    }
+
+    &__pilula {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 1rem;
+        border: 1px solid var(--mc-gray-300, #ececec);
+        border-radius: 1.25rem;
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    // seleção: marcar todas, contador e ação
+    &__acoes {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    &__selecionar-todas {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-size: var(--mc-font-size-xs);
+    }
+
+    &__resumo {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem;
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    &__contador {
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xs);
+    }
+
+    &__lista {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    &__vazio {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 2.5rem 1rem;
+        text-align: center;
+
+        p {
+            margin: 0;
+        }
+
+        .iconify {
+            margin-bottom: 0.5rem;
+            color: var(--mc-gray-300);
+            font-size: 2rem;
+        }
+    }
+
+    &__modal p {
+        margin: 0;
+        text-align: left;
+    }
+}
+
+/** Uma inscrição na análise, na lixeira ou no resultado. */
+.rcv-trash-item {
+    border: 1px solid var(--mc-gray-300, #ececec);
+    border-radius: 8px;
+    background: var(--mc-white, #fff);
+
+    &:hover,
+    &:focus-within {
+        background: var(--mc-gray-100, #fafafa);
+    }
+
+    &__linha {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+    }
+
+    &__selecao {
+        display: flex;
+
+        input {
+            cursor: pointer;
+        }
+
+        input:disabled {
+            cursor: not-allowed;
+        }
+    }
+
+    &__info {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 0.125rem;
+        min-width: 0;
+    }
+
+    &__numero {
+        margin: 0;
+        font-size: var(--mc-font-size-xs);
+        font-weight: var(--mc-font-semibold);
+        overflow-wrap: anywhere;
+    }
+
+    &__meta,
+    &__fases {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.75rem;
+        margin: 0;
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xxs);
+
+        small {
+            color: var(--mc-gray-500);
+        }
+    }
+
+    &__fases {
+        color: var(--mc-gray-500);
+    }
+
+    &__motivo {
+        margin: 0.125rem 0 0;
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xxs);
+    }
+
+    &__situacao {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        align-items: flex-end;
+        gap: 0.125rem;
+        color: var(--mc-gray-700);
+        font-size: var(--mc-font-size-xxs);
+
+        .mc-status {
+            margin: 0;
+            font-size: var(--mc-font-size-xxs);
+        }
+    }
+
+    &--bloqueado {
+        background: var(--mc-gray-100, #fafafa);
+    }
+
+    // em tela estreita: identificação em cima, situação embaixo
+    @media (max-width: 768px) {
+        &__linha {
+            flex-wrap: wrap;
+        }
+
+        &__situacao {
+            align-items: flex-start;
+            width: 100%;
+        }
+    }
+}

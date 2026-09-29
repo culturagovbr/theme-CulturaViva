@@ -6,12 +6,15 @@ app.component('rcv-registration-trash', {
         const text = Utils.getTexts('rcv-registration-trash');
         const messages = useMessages();
 
-        return { text, messages };
+        // substitui cada `%s` do texto pelo próximo argumento
+        const formatar = (chave, ...valores) => valores.reduce((s, v) => s.replace('%s', v), text(chave));
+
+        return { text, formatar, messages };
     },
 
     data() {
         return {
-            aba: 'enviar',
+            situacoes: ['liberada', 'aviso', 'bloqueada'],
             numeros: '',
             motivo: '',
             analise: null,
@@ -25,6 +28,13 @@ app.component('rcv-registration-trash', {
     computed: {
         enviaveis() {
             return (this.analise?.itens || []).filter(item => item.situacao !== 'bloqueada');
+        },
+
+        contagem() {
+            return this.situacoes.reduce((total, situacao) => {
+                total[situacao] = (this.analise?.itens || []).filter(item => item.situacao === situacao).length;
+                return total;
+            }, {});
         },
 
         motivoValido() {
@@ -64,6 +74,14 @@ app.component('rcv-registration-trash', {
             }
         },
 
+        mudarAba(aba) {
+            this.resultado = null;
+
+            if (aba === 'lixeira') {
+                this.carregarLista();
+            }
+        },
+
         analisar() {
             return this.executar(async () => {
                 this.resultado = null;
@@ -71,24 +89,19 @@ app.component('rcv-registration-trash', {
             });
         },
 
-        enviar() {
+        enviar(modal) {
+            modal.close();
+
             return this.executar(async () => {
                 const numeros = this.enviaveis.map(item => item.numero).join(';');
                 const { itens } = await this.post('rcv-lixeira-enviar', { numeros, motivo: this.motivo });
 
                 this.resultado = itens;
                 this.analise = null;
+                this.numeros = '';
                 this.motivo = '';
-                this.messages.success(this.text('enviadas').replace('%s', itens.filter(item => item.resultado === 'enviada').length));
+                this.messages.success(this.formatar('enviadas', itens.filter(item => item.resultado === 'enviada').length));
             });
-        },
-
-        mudarAba(aba) {
-            this.aba = aba;
-
-            if (aba === 'lixeira') {
-                this.carregarLista();
-            }
         },
 
         carregarLista() {
@@ -102,15 +115,29 @@ app.component('rcv-registration-trash', {
             this.selecionados = this.todosSelecionados ? [] : this.restauraveis.map(item => item.numero);
         },
 
-        restaurar() {
+        restaurar(modal) {
+            modal.close();
+
             return this.executar(async () => {
                 const { itens } = await this.post('rcv-lixeira-restaurar', { numeros: this.selecionados.join(';') });
 
                 this.resultado = itens;
-                this.messages.success(this.text('restauradas').replace('%s', itens.filter(item => item.resultado === 'restaurada').length));
+                this.messages.success(this.formatar('restauradas', itens.filter(item => item.resultado === 'restaurada').length));
                 this.lista = (await this.post('rcv-lixeira-listar')).itens;
                 this.selecionados = [];
             });
+        },
+
+        // tom do mc-status para a situação ou o resultado
+        tom(situacao) {
+            return {
+                liberada: 'success',
+                enviada: 'success',
+                restaurada: 'success',
+                aviso: 'warning',
+                bloqueada: 'error',
+                ignorada: 'error',
+            }[situacao] || 'draft';
         },
 
         motivos(item) {
@@ -118,11 +145,14 @@ app.component('rcv-registration-trash', {
         },
 
         avaliacoes(fase) {
-            const nomes = { 0: 'iniciadas', 1: 'concluídas', 2: 'enviadas' };
+            const nomes = { 0: 'avaliacoesIniciadas', 1: 'avaliacoesConcluidas', 2: 'avaliacoesEnviadas' };
+            const partes = Object.entries(fase.avaliacoes || {}).map(([status, total]) => this.formatar(nomes[status] || 'avaliacoes', total));
 
-            return Object.entries(fase.avaliacoes || {})
-                .map(([status, total]) => `${nomes[status] || status}: ${total}`)
-                .join(', ') || '-';
+            return partes.join(', ') || this.text('semAvaliacoes');
+        },
+
+        quando(data) {
+            return data ? new Date(data.replace(' ', 'T')).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
         },
 
         urlInscricao(id) {
