@@ -7,6 +7,7 @@ return [
     'explicacaoEnvio' => i::__('Cole os números das inscrições do Cadastro Nacional. Antes de enviar, o sistema mostra o que acontece com cada uma.'),
     'explicacaoLixeira' => i::__('Inscrições na lixeira saem das filas dos avaliadores e das listas. As enviadas por esta ferramenta podem ser restauradas.'),
     'dicaNumeros' => i::__('Separe por ponto e vírgula, vírgula, espaço ou quebra de linha. O prefixo on- é opcional. Até 200 por vez.'),
+    'dicaSenha' => i::__('Confirme com a senha da sua conta. Contas sem senha cadastrada, como as que entram só pelo gov.br, não podem executar esta ação.'),
     'dicaMotivo' => i::__('Obrigatório, com pelo menos 10 caracteres. Fica registrado junto com quem enviou.'),
     'naoReconhecidos' => i::__('Não reconhecidos: %s'),
     'nadaParaEnviar' => i::__('Nenhuma inscrição da lista pode ser enviada para a lixeira.'),

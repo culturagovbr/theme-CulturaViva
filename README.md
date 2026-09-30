@@ -16,7 +16,9 @@ Há duas chaves principais de configuração do tema:
 ## Lixeira de inscrições
 O core não prevê lixeira para inscrições. O tema usa o status `-10` para tirar inscrições da cadeia do Cadastro Nacional (`rcv.opportunityId` e fases filhas) de todos os fluxos, sem apagá-las.
 
-- Acesso: tela `Painel > Lixeira de inscrições` (`panel/rcv-lixeira`), liberada só para usuários com o papel `saasSuperAdmin` **e** com o id em `rcv.lixeira.usuarios` (env: RCV_LIXEIRA_USUARIOS, ids separados por vírgula).
+- Acesso: tela `Painel > Administração > Lixeira de inscrições` (`panel/rcv-lixeira`), liberada só para usuários com o papel `saasSuperAdmin`.
+- Confirmação: enviar e restaurar pedem a senha da conta (login local). Conta sem senha cadastrada, como a que entra só pelo gov.br, não consegue executar essas ações.
+- Auditoria: além do registro de requisições do MapasBlame, cada envio e restauração grava no `blame_log` a ação `rcv-lixeira <ação>` com os números, o resultado de cada um e o motivo (a senha nunca é gravada).
 - Envio: os números (`on-123`, separados por `;`, vírgula, espaço ou quebra de linha, até 200 por vez) passam por uma análise antes. Em todas as fases, a inscrição vai para `-10`, perde avaliadores (`valuers` e exceções), avaliações iniciadas e concluídas e as permissões dos avaliadores; avaliações enviadas ficam. O motivo é obrigatório.
 - Bloqueios: número inexistente, inscrição já na lixeira e inscrição certificada que é a única certificação da organização (nesse caso, usar a desativação do ponto). Selos nunca são alterados.
 - Vínculo da organização: se o `rcv_registration` da organização aponta para a inscrição, ele passa para outra inscrição ativa da organização (certificada do mesmo tipo, certificada de outro tipo ou a mais recente) ou é removido.

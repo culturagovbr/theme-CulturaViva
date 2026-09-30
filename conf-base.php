@@ -24,7 +24,6 @@ $_config = [
     'rcv.email' => 'suporte.culturaviva@cultura.gov.br',
     'rcv.seals' => env('RCV_SEALS', '6,101,105,116,117'),
     'rcv.opportunityId' => env('RCV_OPPORTUNITY_ID', 5386),
-    'rcv.lixeira.usuarios' => env('RCV_LIXEIRA_USUARIOS', ''), // ids (saasSuperAdmin) que podem usar a lixeira de inscrições
     'rcv.disableTabs' => env('RCV_DISABLE_TABS', false),
     'rcv.disablePnabOpportunity' => env('RCV_DISABLE_PNAB_OPPORTUNITY', false),
     'rcv.disableDataDashboard' => env('RCV_DISABLE_DATA_DASHBOARD', false),

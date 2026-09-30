@@ -193,23 +193,14 @@ class RegistrationTrashIntegrationTest extends TestCase
         $this->assertArrayNotHasKey('', $summary);
     }
 
-    function testAcessoExigeSaasSuperAdminNaLista(): void
+    function testAcessoExigeSaasSuperAdmin(): void
     {
         $app = self::$app;
         $saas_id = (int) $this->conn()->fetchOne("SELECT usr_id FROM role WHERE name = ? ORDER BY usr_id LIMIT 1", [RegistrationTrash::ROLE]);
         $common_id = (int) $this->conn()->fetchOne("SELECT id FROM usr WHERE id NOT IN (SELECT usr_id FROM role) ORDER BY id LIMIT 1");
-        $original = $app->config['rcv.lixeira.usuarios'] ?? '';
 
-        try {
-            $app->config['rcv.lixeira.usuarios'] = "{$saas_id},{$common_id}";
-            $this->assertTrue(RegistrationTrash::canManage($app->repo('User')->find($saas_id)));
-            $this->assertFalse(RegistrationTrash::canManage($app->repo('User')->find($common_id)), 'sem o papel');
-
-            $app->config['rcv.lixeira.usuarios'] = '';
-            $this->assertFalse(RegistrationTrash::canManage($app->repo('User')->find($saas_id)), 'fora da lista');
-        } finally {
-            $app->config['rcv.lixeira.usuarios'] = $original;
-        }
+        $this->assertTrue(RegistrationTrash::canManage($app->repo('User')->find($saas_id)));
+        $this->assertFalse(RegistrationTrash::canManage($app->repo('User')->find($common_id)), 'sem o papel');
     }
 
     function testEnviaERestauraSemPerderNada(): void

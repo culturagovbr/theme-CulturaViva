@@ -222,6 +222,15 @@
         margin: 0;
         text-align: left;
     }
+
+    &__senha {
+        margin-top: 1rem;
+        text-align: left;
+
+        input {
+            width: 100%;
+        }
+    }
 }
 
 /** Uma inscrição na análise, na lixeira ou no resultado. */

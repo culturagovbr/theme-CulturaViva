@@ -17,6 +17,7 @@ app.component('rcv-registration-trash', {
             situacoes: ['liberada', 'aviso', 'bloqueada'],
             numeros: '',
             motivo: '',
+            senha: '',
             analise: null,
             resultado: null,
             lista: [],
@@ -118,12 +119,31 @@ app.component('rcv-registration-trash', {
             });
         },
 
-        enviar(modal) {
+        // abre a confirmação sempre com a senha em branco
+        abrir(modal) {
+            this.senha = '';
+            modal.open();
+        },
+
+        // envia a senha junto e só fecha a confirmação se a ação der certo
+        async confirmar(modal, rota, dados) {
+            const senha = this.senha;
+            this.senha = '';
+
+            const resposta = await this.post(rota, { ...dados, senha });
             modal.close();
+
+            return resposta;
+        },
+
+        enviar(modal) {
+            if (!this.senha) {
+                return;
+            }
 
             return this.executar(async () => {
                 const numeros = this.enviaveis.map(item => item.numero).join(';');
-                const { itens } = await this.post('rcv-lixeira-enviar', { numeros, motivo: this.motivo });
+                const { itens } = await this.confirmar(modal, 'rcv-lixeira-enviar', { numeros, motivo: this.motivo });
 
                 this.resultado = itens;
                 this.analise = null;
@@ -191,10 +211,12 @@ app.component('rcv-registration-trash', {
         },
 
         restaurar(modal) {
-            modal.close();
+            if (!this.senha) {
+                return;
+            }
 
             return this.executar(async () => {
-                const { itens } = await this.post('rcv-lixeira-restaurar', { numeros: this.selecionados.join(';') });
+                const { itens } = await this.confirmar(modal, 'rcv-lixeira-restaurar', { numeros: this.selecionados.join(';') });
 
                 this.resultado = itens;
                 this.messages.success(this.formatar('restauradas', itens.filter(item => item.resultado === 'restaurada').length));
@@ -204,10 +226,12 @@ app.component('rcv-registration-trash', {
         },
 
         restaurarBusca(modal) {
-            modal.close();
+            if (!this.senha) {
+                return;
+            }
 
             return this.executar(async () => {
-                const { itens, restantes } = await this.post('rcv-lixeira-restaurar-busca', { busca: this.busca });
+                const { itens, restantes } = await this.confirmar(modal, 'rcv-lixeira-restaurar-busca', { busca: this.busca });
 
                 this.resultado = itens;
                 this.messages.success(this.formatar('restauradas', itens.filter(item => item.resultado === 'restaurada').length));

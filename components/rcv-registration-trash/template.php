@@ -102,17 +102,22 @@ $this->import('
 
                         <div class="rcv-registration-trash__barra">
                             <mc-modal classes="rcv-registration-trash__modal" :title="text('enviarTitulo')">
-                                <template #default>
+                                <template #default="modal">
                                     <p>{{ formatar('enviarConfirmacao', enviaveis.length) }}</p>
+                                    <div class="field rcv-registration-trash__senha">
+                                        <label for="rcv-lixeira-senha-enviar"><?= i::__('Sua senha') ?></label>
+                                        <input id="rcv-lixeira-senha-enviar" type="password" v-model="senha" autocomplete="current-password" @keydown.enter.prevent="enviar(modal)">
+                                        <small class="rcv-registration-trash__hint">{{ text('dicaSenha') }}</small>
+                                    </div>
                                 </template>
 
                                 <template #actions="modal">
                                     <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
-                                    <button class="button button--primary button--md" :disabled="carregando" @click="enviar(modal)"><?= i::__('Confirmar') ?></button>
+                                    <button class="button button--primary button--md" :disabled="carregando || !senha" @click="enviar(modal)"><?= i::__('Confirmar') ?></button>
                                 </template>
 
                                 <template #button="modal">
-                                    <button type="button" class="button button--primary button--md" :disabled="!motivoValido" @click="modal.open()">
+                                    <button type="button" class="button button--primary button--md" :disabled="!motivoValido" @click="abrir(modal)">
                                         <mc-icon name="trash"></mc-icon>
                                         {{ formatar('enviarBotao', enviaveis.length) }}
                                     </button>
@@ -166,19 +171,24 @@ $this->import('
                         <span v-else>{{ formatar('loteResumo', totais.restauraveis) }}</span>
 
                         <mc-modal classes="rcv-registration-trash__modal" :title="text('loteTitulo')">
-                            <template #default>
+                            <template #default="modal">
                                 <p v-if="numerosBuscados">{{ formatar('loteConfirmacaoLista', loteTamanho, numerosBuscados) }}</p>
                                 <p v-else>{{ formatar('loteConfirmacao', loteTamanho, busca) }}</p>
                                 <p class="rcv-registration-trash__hint" v-if="totais.restauraveis > limite">{{ formatar('loteTeto', limite, totais.restauraveis) }}</p>
+                                <div class="field rcv-registration-trash__senha">
+                                    <label for="rcv-lixeira-senha-lote"><?= i::__('Sua senha') ?></label>
+                                    <input id="rcv-lixeira-senha-lote" type="password" v-model="senha" autocomplete="current-password" @keydown.enter.prevent="restaurarBusca(modal)">
+                                    <small class="rcv-registration-trash__hint">{{ text('dicaSenha') }}</small>
+                                </div>
                             </template>
 
                             <template #actions="modal">
                                 <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
-                                <button class="button button--primary button--md" :disabled="carregando" @click="restaurarBusca(modal)"><?= i::__('Confirmar') ?></button>
+                                <button class="button button--primary button--md" :disabled="carregando || !senha" @click="restaurarBusca(modal)"><?= i::__('Confirmar') ?></button>
                             </template>
 
                             <template #button="modal">
-                                <button type="button" class="button button--primary-outline button--sm" @click="modal.open()">
+                                <button type="button" class="button button--primary-outline button--sm" @click="abrir(modal)">
                                     <mc-icon name="history"></mc-icon>
                                     {{ formatar('loteBotao', loteTamanho) }}
                                 </button>
@@ -201,17 +211,22 @@ $this->import('
                             </button>
 
                             <mc-modal classes="rcv-registration-trash__modal" :title="text('restaurarTitulo')">
-                                <template #default>
+                                <template #default="modal">
                                     <p>{{ formatar('restaurarConfirmacao', selecionados.length) }}</p>
+                                    <div class="field rcv-registration-trash__senha">
+                                        <label for="rcv-lixeira-senha-restaurar"><?= i::__('Sua senha') ?></label>
+                                        <input id="rcv-lixeira-senha-restaurar" type="password" v-model="senha" autocomplete="current-password" @keydown.enter.prevent="restaurar(modal)">
+                                        <small class="rcv-registration-trash__hint">{{ text('dicaSenha') }}</small>
+                                    </div>
                                 </template>
 
                                 <template #actions="modal">
                                     <button class="button button--text button--md" @click="modal.close()"><?= i::__('Cancelar') ?></button>
-                                    <button class="button button--primary button--md" :disabled="carregando" @click="restaurar(modal)"><?= i::__('Confirmar') ?></button>
+                                    <button class="button button--primary button--md" :disabled="carregando || !senha" @click="restaurar(modal)"><?= i::__('Confirmar') ?></button>
                                 </template>
 
                                 <template #button="modal">
-                                    <button type="button" class="button button--primary button--sm" :disabled="!selecionados.length || acimaDoLimite" @click="modal.open()">
+                                    <button type="button" class="button button--primary button--sm" :disabled="!selecionados.length || acimaDoLimite" @click="abrir(modal)">
                                         <mc-icon name="history"></mc-icon>
                                         {{ formatar('restaurarBotao', selecionados.length) }}
                                     </button>

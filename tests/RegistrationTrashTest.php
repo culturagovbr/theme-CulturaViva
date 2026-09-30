@@ -71,14 +71,26 @@ class RegistrationTrashTest extends TestCase
         $this->assertSame(['numbers' => [], 'invalid' => []], RegistrationTrash::parseNumbers(" ;\n, "));
     }
 
-    function testAceitaSomenteUsuariosDaLista(): void
+    function testConfereASenhaLocal(): void
     {
-        $this->assertTrue(RegistrationTrash::isAllowedUserId(7, '3, 7,12'));
-        $this->assertTrue(RegistrationTrash::isAllowedUserId(7, ['7']));
-        $this->assertFalse(RegistrationTrash::isAllowedUserId(8, '3,7,12'));
-        $this->assertFalse(RegistrationTrash::isAllowedUserId(7, ''));
-        $this->assertFalse(RegistrationTrash::isAllowedUserId(0, '0'));
-        $this->assertFalse(RegistrationTrash::isAllowedUserId(7, '7abc'));
+        $hash = password_hash('segredo-123', PASSWORD_DEFAULT);
+
+        $this->assertSame('ok', RegistrationTrash::checkPassword($hash, 'segredo-123'));
+        $this->assertSame('invalida', RegistrationTrash::checkPassword($hash, 'outra'));
+        $this->assertSame('invalida', RegistrationTrash::checkPassword($hash, ''));
+    }
+
+    function testBloqueiaContaSemSenhaLocal(): void
+    {
+        $this->assertSame('sem_senha', RegistrationTrash::checkPassword(null, 'qualquer'));
+        $this->assertSame('sem_senha', RegistrationTrash::checkPassword('', 'qualquer'));
+    }
+
+    function testRegistroNoBlameTemSoNumeroEResultado(): void
+    {
+        $items = [['numero' => 'on-1', 'resultado' => 'enviada', 'motivos' => ['ponteiro'], 'ponteiro' => ['organizacao' => 9]]];
+
+        $this->assertSame([['numero' => 'on-1', 'resultado' => 'enviada']], RegistrationTrash::blameItems($items));
     }
 
     function testIdentificaTipoPelaCategoria(): void

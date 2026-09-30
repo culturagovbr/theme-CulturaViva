@@ -32,6 +32,9 @@ final class RegistrationTrash
 
     public const ROLE = 'saasSuperAdmin';
 
+    // senha do login local (MultipleLocalAuth)
+    public const PASSWORD_META = 'localAuthenticationPassword';
+
     // nomes usados no Cadastro Nacional (mesmos do hook statusesNames do tema)
     private const STATUS_NAMES = [10 => 'Habilitado', 3 => 'Inabilitado'];
 
@@ -146,7 +149,12 @@ final class RegistrationTrash
                 $this->errorJson(sprintf(i::__('Informe o motivo com pelo menos %d caracteres.'), self::MIN_REASON_LENGTH), 400);
             }
 
-            $this->json(['itens' => self::trash($parsed['numbers'], $reason, $app->user)]);
+            self::requirePassword($this);
+
+            $items = self::trash($parsed['numbers'], $reason, $app->user);
+            self::blame('enviar', ['motivo' => $reason, 'itens' => self::blameItems($items)]);
+
+            $this->json(['itens' => $items]);
         });
 
         $app->hook('POST(site.rcv-lixeira-restaurar)', function () use ($app) {
@@ -163,7 +171,12 @@ final class RegistrationTrash
                 $this->errorJson(sprintf(i::__('Informe no máximo %d números por vez.'), self::MAX_NUMBERS), 400);
             }
 
-            $this->json(['itens' => self::restore($parsed['numbers'], $app->user)]);
+            self::requirePassword($this);
+
+            $items = self::restore($parsed['numbers'], $app->user);
+            self::blame('restaurar', ['itens' => self::blameItems($items)]);
+
+            $this->json(['itens' => $items]);
         });
 
         $app->hook('POST(site.rcv-lixeira-restaurar-busca)', function () use ($app) {
@@ -176,7 +189,12 @@ final class RegistrationTrash
                 $this->errorJson(i::__('Informe uma busca para restaurar em lote.'), 400);
             }
 
-            $this->json(self::restoreBySearch($search, $app->user));
+            self::requirePassword($this);
+
+            $result = self::restoreBySearch($search, $app->user);
+            self::blame('restaurar-busca', ['busca' => $search, 'itens' => self::blameItems($result['itens'])]);
+
+            $this->json($result);
         });
 
         $app->hook('POST(site.rcv-lixeira-listar)', function () {
@@ -186,12 +204,13 @@ final class RegistrationTrash
             $this->json(self::listTrashed($this->data));
         });
 
+        // item no grupo Administração do menu do painel
         $app->hook('panel.nav', function (&$nav_items) use ($app) {
-            if (!isset($nav_items['opportunities'])) {
+            if (!isset($nav_items['admin'])) {
                 return;
             }
 
-            $nav_items['opportunities']['items'][] = [
+            $nav_items['admin']['items'][] = [
                 'route' => 'panel/rcv-lixeira',
                 'icon' => 'trash',
                 'label' => i::__('Lixeira de inscrições'),
@@ -223,19 +242,52 @@ final class RegistrationTrash
     // UserInterface porque o visitante é um GuestUser, não uma entidade User
     public static function canManage(?UserInterface $user): bool
     {
-        if (!$user || $user->is('guest') || !$user->is(self::ROLE)) {
-            return false;
-        }
-
-        return self::isAllowedUserId((int) $user->id, App::i()->config['rcv.lixeira.usuarios'] ?? '');
+        return $user && !$user->is('guest') && $user->is(self::ROLE);
     }
 
-    public static function isAllowedUserId(int $user_id, $allowed): bool
+    // confirma a senha local de quem executa envio e restauração
+    public static function requirePassword($controller): void
     {
-        $allowed = is_array($allowed) ? $allowed : explode(',', (string) $allowed);
-        $allowed = array_filter(array_map('trim', $allowed), fn ($id) => ctype_digit($id));
+        $user = App::i()->user;
+        $hash = $user instanceof User ? $user->getMetadata(self::PASSWORD_META) : null;
 
-        return $user_id > 0 && in_array($user_id, array_map('intval', $allowed), true);
+        $check = self::checkPassword($hash, (string) ($controller->data['senha'] ?? ''));
+
+        if ($check === 'sem_senha') {
+            $controller->errorJson(i::__('Sua conta não tem senha cadastrada, por isso não é possível confirmar esta ação.'), 403);
+        }
+
+        if ($check !== 'ok') {
+            $controller->errorJson(i::__('Senha incorreta.'), 403);
+        }
+    }
+
+    public static function checkPassword($hash, string $password): string
+    {
+        if (!is_string($hash) || $hash === '') {
+            return 'sem_senha';
+        }
+
+        return $password !== '' && password_verify($password, $hash) ? 'ok' : 'invalida';
+    }
+
+    // registra no MapasBlame o que foi feito, com os números e o motivo
+    public static function blame(string $action, array $data): void
+    {
+        if (!class_exists(\MapasBlame\Request::class)) {
+            return;
+        }
+
+        try {
+            (new \MapasBlame\Request())->log("rcv-lixeira {$action}", $data);
+        } catch (\Throwable $e) {
+            App::i()->log->error("CulturaViva: falha ao registrar lixeira no MapasBlame: {$e->getMessage()}");
+        }
+    }
+
+    public static function blameItems(array $items): array
+    {
+        return array_map(fn ($item) => ['numero' => $item['numero'], 'resultado' => $item['resultado']], $items);
     }
 
     // aceita números separados por ;, vírgula, espaço ou quebra de linha, com ou sem o prefixo on-
