@@ -1,0 +1,30 @@
+/** Botão e modal de alteração da data da certificação, na tela do certificado. */
+.rcv-certification-date {
+    // o botão de imprimir fica centralizado por posição absoluta; este vai para a direita
+    &__button {
+        margin-left: auto;
+    }
+
+    &__modal p {
+        margin: 0 0 1rem;
+        text-align: left;
+    }
+
+    &__current {
+        color: var(--mc-gray-700, #4e4e4e);
+    }
+
+    &__field {
+        margin-top: 1rem;
+        text-align: left;
+
+        input {
+            width: 100%;
+        }
+    }
+
+    &__hint {
+        display: block;
+        margin-top: 0.25rem;
+    }
+}

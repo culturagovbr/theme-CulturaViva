@@ -53,6 +53,7 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         EvaluationDistribution::register();
         CommitteeMembership::register();
         EvaluationResultsVisibility::register();
+        CertificationDate::register();
 
         $self = $this;
 
