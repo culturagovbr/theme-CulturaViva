@@ -17,7 +17,7 @@ Há duas chaves principais de configuração do tema:
 A data impressa no certificado é o `createTimestamp` da relação entre a organização e o selo de verificação (`rcv.verificationSeals`), criada pelo core na aprovação da inscrição. O core não prevê editar essa data, então o tema expõe uma ação própria (`CertificationDate.php`).
 
 - Acesso: botão "Alterar data da certificação" na tela do certificado (`seal/sealRelation/<id>`), visível só para usuários com o papel `admin`.
-- Confirmação: a alteração pede a senha da conta (login local). Conta sem senha cadastrada, como a que entra só pelo gov.br, não consegue executar a ação.
+- Confirmação: a alteração pede a senha da conta (login local). Conta sem senha cadastrada, como a que entra só pelo gov.br, não consegue executar a ação. Senhas erradas contam nos mesmos metadados de tentativa e bloqueio do login (`AUTH_NUMBER_ATTEMPTS` e `AUTH_BLOCK_TIME`, lidos em `rcv.passwordAttempts` e `rcv.passwordBlockTime`), então o bloqueio vale para o login e para a ação.
 - Regras: a data não pode ser inválida, anterior a 2004 (início da Política Nacional Cultura Viva) nem futura. A validade do selo (`validateDate`) é recalculada a partir da nova data, como o core faz na criação.
 - Efeito: o certificado passa a mostrar a nova data. A coluna "Certificação" da listagem de organizações e a planilha exportada leem a primeira relação de selo da organização, que em geral é a de verificação; quando outro selo veio antes, esses dois lugares seguem mostrando a data daquele selo.
 - Auditoria: cada alteração grava no `blame_log` do MapasBlame a ação `rcv-data-certificacao alterar`, com a relação, a organização, o selo, a data anterior e a nova (a senha nunca é gravada).

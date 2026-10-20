@@ -84,6 +84,36 @@ class CertificationDateTest extends TestCase
         $this->assertSame('no_password', CertificationDate::checkPassword('', 'segredo'));
     }
 
+    function testBlockLastsUntilTheLimitInstant(): void
+    {
+        $this->assertTrue(CertificationDate::isBlocked(1000, 999));
+        $this->assertTrue(CertificationDate::isBlocked(1000, 1000));
+        $this->assertFalse(CertificationDate::isBlocked(1000, 1001));
+        $this->assertFalse(CertificationDate::isBlocked(0, 1));
+    }
+
+    function testCountsAttemptsAndBlocksAfterTheLimit(): void
+    {
+        $now = 1000;
+
+        $this->assertSame([1, 0], CertificationDate::failureState(0, 0, $now, 5, 900));
+        // como no plugin de login, a contagem passa do limite antes de bloquear
+        $this->assertSame([6, 0], CertificationDate::failureState(5, 0, $now, 5, 900));
+
+        // a sétima falha bloqueia por 900 segundos e zera a contagem
+        $this->assertSame([0, $now + 900], CertificationDate::failureState(6, 0, $now, 5, 900));
+    }
+
+    function testBlockedUserDoesNotAccumulateAttempts(): void
+    {
+        $this->assertSame([2, 1500], CertificationDate::failureState(2, 1500, 1000, 5, 900));
+    }
+
+    function testExpiredBlockCountsAgain(): void
+    {
+        $this->assertSame([1, 500], CertificationDate::failureState(0, 500, 1000, 5, 900));
+    }
+
     function testPasswordMetadataNameWithoutThePlugin(): void
     {
         $this->assertSame('localAuthenticationPassword', CertificationDate::passwordMeta());

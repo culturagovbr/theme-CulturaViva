@@ -22,8 +22,10 @@ final class CertificationDate
 {
     public const ROLE = 'admin';
 
-    // usado quando o plugin MultipleLocalAuth não está carregado
+    // usados quando o plugin MultipleLocalAuth não está carregado
     public const PASSWORD_META = 'localAuthenticationPassword';
+    public const ATTEMPTS_LIMIT = 5;
+    public const BLOCK_SECONDS = 900;
     public const ROUTE = 'rcv-alterar-data-certificacao';
     public const BLAME_ACTION = 'rcv-data-certificacao alterar';
 
@@ -178,12 +180,22 @@ final class CertificationDate
         }
     }
 
-    // confirma a senha local de quem altera a data
+    /**
+     * Confirma a senha local de quem altera a data. Erros contam nos mesmos metadados de tentativa
+     * e bloqueio do login local, então um bloqueio vale para os dois e o endpoint não serve de
+     * oráculo para descobrir a senha.
+     */
     public static function requirePassword($controller): void
     {
-        $user = App::i()->user;
-        $hash = $user instanceof User ? $user->getMetadata(self::passwordMeta()) : null;
+        $user = App::i()->user instanceof User ? App::i()->user : null;
+        $now = time();
 
+        if ($user && self::isBlocked(self::blockedUntil($user), $now)) {
+            $minutes = max(1, (int) ceil((self::blockedUntil($user) - $now) / 60));
+            $controller->errorJson(sprintf(i::__('Confirmação bloqueada por excesso de tentativas. Tente novamente em %d minutos.'), $minutes), 403);
+        }
+
+        $hash = $user?->getMetadata(self::passwordMeta());
         $check = self::checkPassword($hash, (string) ($controller->data['password'] ?? ''));
 
         if ($check === 'no_password') {
@@ -191,14 +203,85 @@ final class CertificationDate
         }
 
         if ($check !== 'ok') {
+            self::registerFailure($user, $now);
             $controller->errorJson(i::__('Senha incorreta.'), 403);
         }
+
+        self::clearFailures($user);
     }
 
     // nome do metadado da senha local, lido do plugin quando ele está carregado
     public static function passwordMeta(): string
     {
         return class_exists(LocalAuth::class) ? LocalAuth::$passMetaName : self::PASSWORD_META;
+    }
+
+    public static function isBlocked(int $blocked_until, int $now): bool
+    {
+        return $blocked_until >= $now;
+    }
+
+    /**
+     * Estado após uma senha errada, igual ao login local (MultipleLocalAuth::middlewareLoginAttempts):
+     * a contagem sobe até passar do limite e a falha seguinte bloqueia por um período e zera a contagem.
+     *
+     * @return array{0:int,1:int} tentativas e instante até o qual fica bloqueado
+     */
+    public static function failureState(int $attempts, int $blocked_until, int $now, int $limit, int $block_seconds): array
+    {
+        if (self::isBlocked($blocked_until, $now)) {
+            return [$attempts, $blocked_until];
+        }
+
+        if ($attempts > $limit) {
+            return [0, $now + $block_seconds];
+        }
+
+        return [$attempts + 1, $blocked_until];
+    }
+
+    private static function blockedUntil(User $user): int
+    {
+        return class_exists(LocalAuth::class) ? (int) $user->getMetadata(LocalAuth::$timeBlockedloginAttempMetadata) : 0;
+    }
+
+    private static function registerFailure(?User $user, int $now): void
+    {
+        if (!$user || !class_exists(LocalAuth::class)) {
+            return;
+        }
+
+        $app = App::i();
+        [$attempts, $blocked_until] = self::failureState(
+            (int) $user->getMetadata(LocalAuth::$loginAttempMetadata),
+            self::blockedUntil($user),
+            $now,
+            (int) ($app->config['rcv.passwordAttempts'] ?? self::ATTEMPTS_LIMIT),
+            (int) ($app->config['rcv.passwordBlockTime'] ?? self::BLOCK_SECONDS)
+        );
+
+        self::saveAttempts($user, $attempts, $blocked_until);
+    }
+
+    private static function clearFailures(?User $user): void
+    {
+        if ($user && class_exists(LocalAuth::class) && (int) $user->getMetadata(LocalAuth::$loginAttempMetadata) > 0) {
+            self::saveAttempts($user, 0, 0);
+        }
+    }
+
+    private static function saveAttempts(User $user, int $attempts, int $blocked_until): void
+    {
+        $app = App::i();
+
+        $app->disableAccessControl();
+        try {
+            $user->setMetadata(LocalAuth::$loginAttempMetadata, $attempts);
+            $user->setMetadata(LocalAuth::$timeBlockedloginAttempMetadata, $blocked_until);
+            $user->saveMetadata(true);
+        } finally {
+            $app->enableAccessControl();
+        }
     }
 
     public static function checkPassword($hash, string $password): string
