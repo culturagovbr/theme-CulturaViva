@@ -63,6 +63,7 @@ $this->import('
             <button class="button button--primary button--icon button--sm rcv-certificate-print" onclick="window.print();">
                 <mc-icon name="print"></mc-icon> <?php i::_e("Salvar");?>
             </button>
+            <?php $this->part('certification-date-button', ['relation' => $relation]); ?>
         </div>
         <div class="rcv-certificate rcv-certificate--blue">
             <div class="rcv-certificate__inner">
