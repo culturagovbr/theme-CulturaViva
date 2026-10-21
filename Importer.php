@@ -728,6 +728,16 @@ class Importer {
      * @deprecated Usar findOrganizationFromOtherAgentReadOnly() na Fase A
      */
     static function findOrganizationFromOtherAgent(object $row): ?Agent {
+        return self::findOrganizationFromOtherAgentWithReason($row)['organization'];
+    }
+
+    /**
+     * Núcleo do Cenário 5. Motivo do alerta: 'diferente', 'malformado' ou 'sem_cpf'.
+     *
+     * @param object $row
+     * @return array{organization: Agent|null, reason: string|null}
+     */
+    private static function findOrganizationFromOtherAgentWithReason(object $row): array {
         $app = App::i();
 
         if ($row->ponto_tipo == $app->config['rcv.categoriesMap']['ponto-coletivo']) {
@@ -747,11 +757,12 @@ class Importer {
             $ids = $query->findIds();
         }
 
-        
+        $sem_conflito = ['organization' => null, 'reason' => null];
+
         $organizations = $app->repo('Agent')->findBy(['id' => $ids]);
         foreach($organizations as $org) {
             if (Utils::formatCnpjCpf($org->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)) {
-                return null;
+                return $sem_conflito;
             }
         }
 
@@ -759,43 +770,43 @@ class Importer {
         $organization = $app->repo('Agent')->findOneBy(['id' => $ids], ['updateTimestamp' => 'DESC']);
 
         if ( !$organization ) {
-            return null;
+            return $sem_conflito;
         }
 
         if($organization->status < 0) {
-            return null;
+            return $sem_conflito;
         }
 
         $owner = $organization->owner;
 
         if ($owner && $owner->type->id != 1) {
-            return null;
+            return $sem_conflito;
         }
 
-        if(!$organization->owner->cpf && $organization->owner->name != $row->responsavel_nome) {
-            return $organization;
+        if (!$organization->owner->cpf) {
+            return ['organization' => $organization, 'reason' => 'sem_cpf'];
         }
 
         if (!v::cpf()->validate($organization->owner->cpf)) {
-            return null;
+            return ['organization' => $organization, 'reason' => 'malformado'];
         }
 
         if (Utils::formatCnpjCpf($organization->owner->cpf) != Utils::formatCnpjCpf($row->responsavel_cpf)) {
-            return $organization;
+            return ['organization' => $organization, 'reason' => 'diferente'];
         }
 
-        return null;
+        return $sem_conflito;
     }
 
     /**
-     * Versão read-only de findOrganizationFromOtherAgent.
+     * Versão read-only de findOrganizationFromOtherAgent, com o motivo do alerta.
      * Idêntica ao original — já não fazia writes.
      *
      * @param object $row
-     * @return Agent|null
+     * @return array{organization: Agent|null, reason: string|null}
      */
-    public static function findOrganizationFromOtherAgentReadOnly(object $row): ?Agent {
-        return self::findOrganizationFromOtherAgent($row);
+    public static function findOrganizationFromOtherAgentReadOnly(object $row): array {
+        return self::findOrganizationFromOtherAgentWithReason($row);
     }
 
     /** 
@@ -923,8 +934,8 @@ class Importer {
                     continue;
                 }
 
+                // CNPJ (via @keyword acima) + CPF já identificam a organização
                 if ($coletivo && $coletivo_status >= 0
-                    && $app->slugify($coletivo[0]->name) == $app->slugify($row->organizacao_nome)
                     && Utils::formatCnpjCpf($registration->owner->cpf) == Utils::formatCnpjCpf($row->responsavel_cpf)
                 ) {
                     return [
@@ -1101,11 +1112,13 @@ class Importer {
         ];
 
         // Cenário 5: CPF conflitante (organização vinculada a outro responsável)
-        if ($org = self::findOrganizationFromOtherAgentReadOnly($row)) {
+        $cenario5 = self::findOrganizationFromOtherAgentReadOnly($row);
+        if ($org = $cenario5['organization']) {
             $decision['scenario']        = 5;
             $decision['organization_id'] = self::entityId($org);
             $decision['email']['organization_name'] = $org->name;
             $decision['email']['organization_cnpj'] = $org->cnpj;
+            $decision['email']['scenario5_reason']   = $cenario5['reason'];
             return $decision;
         }
 
@@ -1182,6 +1195,7 @@ class Importer {
         ];
 
         $cleared_agent_ids = [];
+        $planned_organizations = [];
 
         foreach ($data_range as $index => $raw_row) {
             $line     = $index + 1;
@@ -1193,6 +1207,8 @@ class Importer {
                 $cleared_agent_ids[$agent_id] = true;
             }
 
+            self::reconcileWithPlannedRows($decision, $planned_organizations);
+
             $plan['rows'][] = $decision;
 
             $app->log->debug("Fase A: linha {$line} → cenário {$decision['scenario']}");
@@ -1200,6 +1216,50 @@ class Importer {
 
         $app->log->info("Fase A: {$plan['total_rows']} linhas resolvidas.");
         return $plan;
+    }
+
+    /**
+     * Ajusta a linha quando a mesma organização já vai ser criada por uma linha anterior da planilha.
+     * Mesmo CPF e categoria: linha ignorada. Mesmo CPF, outra categoria: inscrição na organização da
+     * linha anterior. Outro CPF: Cenário 5.
+     *
+     * @param array $decision decisão da linha, já resolvida contra o banco
+     * @param array $planned organizações que linhas anteriores vão criar, por CNPJ (ou nome + CPF, no coletivo)
+     */
+    private static function reconcileWithPlannedRows(array &$decision, array &$planned): void {
+        if (!in_array($decision['scenario'], [2, 3.1, 4], true)) {
+            return;
+        }
+
+        $app = App::i();
+        $row = $decision['row'];
+        $cpf = preg_replace('/\D/', '', (string) $row->responsavel_cpf);
+        $key = $row->organizacao_cnpj
+            ? 'cnpj:' . preg_replace('/\D/', '', $row->organizacao_cnpj)
+            : 'coletivo:' . $app->slugify((string) $row->organizacao_nome) . ':' . $cpf;
+
+        if (!isset($planned[$key])) {
+            $planned[$key] = ['line' => $decision['line'], 'cpf' => $cpf, 'categories' => [$row->ponto_tipo => true]];
+            return;
+        }
+
+        $first = $planned[$key];
+        $decision['deferred'] = ['clear_cpf_agent_ids' => [], 'set_org_cnpj' => null];
+        $decision['registration_id'] = null;
+
+        if ($first['cpf'] !== $cpf) {
+            $decision['scenario'] = 5;
+            $decision['organization_id'] = null;
+            $decision['email']['scenario5_reason'] = 'diferente';
+        } elseif (isset($first['categories'][$row->ponto_tipo])) {
+            $decision['scenario'] = null;
+            $decision['duplicate_of_line'] = $first['line'];
+        } else {
+            $decision['scenario'] = 2;
+            $decision['organization_id'] = null;
+            $decision['organization_from_line'] = $first['line'];
+            $planned[$key]['categories'][$row->ponto_tipo] = true;
+        }
     }
 
     /** 
@@ -1871,8 +1931,21 @@ class Importer {
         $importer_seal = $app->repo('Seal')->find($app->config['rcv.importerSeal']);
         $waiting_seal  = $app->repo('Seal')->find($app->config['rcv.waitingUpdateSeal']);
 
+        $organization_by_line = [];
+
         foreach ($plan['rows'] as $i => &$decision) {
             $line = $decision['line'];
+
+            if ($decision['scenario'] === null) {
+                self::generateImporterLog($pnab_reg,
+                    "[{$line}/{$total}] Linha ignorada: repete a linha {$decision['duplicate_of_line']}");
+                $decision = ['line' => $line, 'scenario' => null, 'email' => $decision['email'] ?? []];
+                continue;
+            }
+
+            if (isset($decision['organization_from_line'])) {
+                $decision['organization_id'] = $organization_by_line[$decision['organization_from_line']] ?? null;
+            }
 
             try {
                 // Ajustes diferidos da Fase A
@@ -1880,6 +1953,8 @@ class Importer {
 
                 // Aplicação do cenário
                 self::applyScenario($decision, $importer_seal, $waiting_seal, $pnab_reg);
+
+                $organization_by_line[$line] = $decision['organization_id'] ?? null;
 
                 $context = self::buildScenarioLogContext($decision, $plan['pnab_registration_id']);
 
@@ -2014,7 +2089,7 @@ class Importer {
                     break;
 
                 case 5:
-                    $template = 'quinto_caso.html';
+                    $template = ($e['scenario5_reason'] ?? null) === 'diferente' ? 'quinto_caso.html' : 'quinto_caso_nao_confirmado.html';
                     $template_data = [
                         'siteName'         => $app->siteName,
                         'userName'         => $e['user_name'],
@@ -2023,7 +2098,7 @@ class Importer {
                         'organizationCNPJ' => $e['organization_cnpj'],
                         'type'             => $e['category'],
                     ];
-                    $subject = "[Cultura Viva] Sua organização {$e['organization_name']} foi certificada por um Edital de Seleção da Cultura Viva.";
+                    $subject = "[Cultura Viva] Pendência no cadastro da organização {$e['organization_name']}";
                     break;
 
                 default:
