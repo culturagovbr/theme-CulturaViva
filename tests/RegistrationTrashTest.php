@@ -1,0 +1,246 @@
+<?php
+
+namespace CulturaViva\Tests;
+
+use CulturaViva\RegistrationTrash;
+use CulturaViva\RegistrationTrashSummaryFilter;
+use MapasCulturais\GuestUser;
+use PHPUnit\Framework\TestCase;
+
+require_once dirname(__DIR__, 4) . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/RegistrationTrash.php';
+require_once dirname(__DIR__) . '/RegistrationTrashSummaryFilter.php';
+
+class RegistrationTrashTest extends TestCase
+{
+    const CATEGORIES = ['pontao' => 'Pontão de Cultura (entidade com CNPJ)', 'ponto-entidade' => 'Ponto de Cultura (entidade com CNPJ)'];
+
+    function testReconheceSomenteOStatusDaLixeira(): void
+    {
+        $this->assertTrue(RegistrationTrash::isTrashed(-10));
+        $this->assertTrue(RegistrationTrash::isTrashed('-10'));
+
+        foreach ([null, 0, 1, 2, 3, 8, 10, -9, -2] as $status) {
+            $this->assertFalse(RegistrationTrash::isTrashed($status), "status {$status}");
+        }
+    }
+
+    function testBloqueiaSaidaDaLixeira(): void
+    {
+        foreach ([0, 1, 2, 3, 8, 10] as $new_status) {
+            $this->assertTrue(RegistrationTrash::blocksStatusChange(-10, $new_status), "-10 para {$new_status}");
+        }
+    }
+
+    function testPermiteManterNaLixeira(): void
+    {
+        $this->assertFalse(RegistrationTrash::blocksStatusChange(-10, -10));
+    }
+
+    function testNaoInterfereForaDaLixeira(): void
+    {
+        $this->assertFalse(RegistrationTrash::blocksStatusChange(1, 10));
+        $this->assertFalse(RegistrationTrash::blocksStatusChange(1, -10));
+        $this->assertFalse(RegistrationTrash::blocksStatusChange(null, 1));
+    }
+
+    function testVisitanteENuloNaoAcessam(): void
+    {
+        $this->assertFalse(RegistrationTrash::canManage(GuestUser::i()));
+        $this->assertFalse(RegistrationTrash::canManage(null));
+    }
+
+    function testLeNumerosComSeparadoresMisturados(): void
+    {
+        $parsed = RegistrationTrash::parseNumbers("on-123; on-456,789\n  on-1011\ton-1213  ON-1415");
+
+        $this->assertSame(['on-123', 'on-456', 'on-789', 'on-1011', 'on-1213', 'on-1415'], $parsed['numbers']);
+        $this->assertSame([], $parsed['invalid']);
+    }
+
+    function testIgnoraRepetidosEListaInvalidos(): void
+    {
+        $parsed = RegistrationTrash::parseNumbers('on-123; 123; on-0123; abc; on-; 12a');
+
+        $this->assertSame(['on-123'], $parsed['numbers']);
+        $this->assertSame(['abc', 'on-', '12a'], $parsed['invalid']);
+    }
+
+    function testEntradaVazia(): void
+    {
+        $this->assertSame(['numbers' => [], 'invalid' => []], RegistrationTrash::parseNumbers(" ;\n, "));
+    }
+
+    function testConfereASenhaLocal(): void
+    {
+        $hash = password_hash('segredo-123', PASSWORD_DEFAULT);
+
+        $this->assertSame('ok', RegistrationTrash::checkPassword($hash, 'segredo-123'));
+        $this->assertSame('invalida', RegistrationTrash::checkPassword($hash, 'outra'));
+        $this->assertSame('invalida', RegistrationTrash::checkPassword($hash, ''));
+    }
+
+    function testBloqueiaContaSemSenhaLocal(): void
+    {
+        $this->assertSame('sem_senha', RegistrationTrash::checkPassword(null, 'qualquer'));
+        $this->assertSame('sem_senha', RegistrationTrash::checkPassword('', 'qualquer'));
+    }
+
+    function testRegistroNoBlameTemSoNumeroEResultado(): void
+    {
+        $items = [['numero' => 'on-1', 'resultado' => 'enviada', 'motivos' => ['ponteiro'], 'ponteiro' => ['organizacao' => 9]]];
+
+        $this->assertSame([['numero' => 'on-1', 'resultado' => 'enviada']], RegistrationTrash::blameItems($items));
+    }
+
+    function testIdentificaTipoPelaCategoria(): void
+    {
+        $this->assertSame('pontao', RegistrationTrash::typeOfCategory(self::CATEGORIES['pontao'], self::CATEGORIES));
+        $this->assertSame('ponto', RegistrationTrash::typeOfCategory(self::CATEGORIES['ponto-entidade'], self::CATEGORIES));
+        $this->assertSame('ponto', RegistrationTrash::typeOfCategory(null, self::CATEGORIES));
+    }
+
+    function testBloqueiaNaoEncontradaEJaNaLixeira(): void
+    {
+        $this->assertSame(['situacao' => 'bloqueada', 'motivos' => ['nao_encontrada']], RegistrationTrash::classify(['found' => false]));
+        $this->assertSame(['situacao' => 'bloqueada', 'motivos' => ['ja_na_lixeira']], RegistrationTrash::classify(['found' => true, 'status' => -10]));
+    }
+
+    function testBloqueiaUnicaCertificacao(): void
+    {
+        $result = RegistrationTrash::classify(['found' => true, 'status' => 10, 'org_has_seal' => true, 'other_certified_same_type' => false]);
+
+        $this->assertSame(['situacao' => 'bloqueada', 'motivos' => ['unica_certificacao']], $result);
+    }
+
+    function testAvisaCertificacaoDuplicada(): void
+    {
+        $result = RegistrationTrash::classify(['found' => true, 'status' => 10, 'org_has_seal' => true, 'other_certified_same_type' => true]);
+
+        $this->assertSame(['situacao' => 'aviso', 'motivos' => ['certificacao_duplicada']], $result);
+    }
+
+    function testAvisaCertificadaSemSelo(): void
+    {
+        $result = RegistrationTrash::classify(['found' => true, 'status' => 10, 'org_has_seal' => false, 'other_certified_same_type' => false]);
+
+        $this->assertSame(['situacao' => 'aviso', 'motivos' => ['certificada_sem_selo']], $result);
+    }
+
+    function testAvisaPonteiroDaOrganizacao(): void
+    {
+        $result = RegistrationTrash::classify(['found' => true, 'status' => 1, 'pointer_to_this' => true]);
+
+        $this->assertSame(['situacao' => 'aviso', 'motivos' => ['ponteiro']], $result);
+    }
+
+    function testLiberaQualquerOutroStatus(): void
+    {
+        foreach ([0, 1, 2, 3, 8] as $status) {
+            $this->assertSame(['situacao' => 'liberada', 'motivos' => []], RegistrationTrash::classify(['found' => true, 'status' => $status]), "status {$status}");
+        }
+    }
+
+    function testPonteiroPrefereCertificadaDoMesmoTipo(): void
+    {
+        $candidates = [
+            ['id' => 1, 'status' => 1, 'type' => 'ponto', 'timestamp' => '2026-09-01'],
+            ['id' => 2, 'status' => 10, 'type' => 'pontao', 'timestamp' => '2026-09-02'],
+            ['id' => 3, 'status' => 10, 'type' => 'ponto', 'timestamp' => '2025-01-01'],
+        ];
+
+        $this->assertSame(3, RegistrationTrash::choosePointerTarget($candidates, 'ponto'));
+    }
+
+    function testPonteiroUsaCertificadaDeOutroTipoAntesDaAtiva(): void
+    {
+        $candidates = [
+            ['id' => 1, 'status' => 1, 'type' => 'ponto', 'timestamp' => '2026-09-01'],
+            ['id' => 2, 'status' => 10, 'type' => 'pontao', 'timestamp' => '2025-01-01'],
+        ];
+
+        $this->assertSame(2, RegistrationTrash::choosePointerTarget($candidates, 'ponto'));
+    }
+
+    function testPonteiroUsaAtivaMaisRecente(): void
+    {
+        $candidates = [
+            ['id' => 1, 'status' => 1, 'type' => 'ponto', 'timestamp' => '2026-01-01'],
+            ['id' => 2, 'status' => 3, 'type' => 'ponto', 'timestamp' => '2026-09-01'],
+        ];
+
+        $this->assertSame(2, RegistrationTrash::choosePointerTarget($candidates, 'ponto'));
+    }
+
+    function testPonteiroVazioSemCandidatas(): void
+    {
+        $this->assertNull(RegistrationTrash::choosePointerTarget([], 'ponto'));
+    }
+
+    function testBackupJaUsadoNaoValeParaRestaurar(): void
+    {
+        $this->assertTrue(RegistrationTrash::hasUsableRecord('{"status": 1, "motivo": "x"}'));
+        $this->assertFalse(RegistrationTrash::hasUsableRecord('{"status": 1, "restaurada": {"usuario": 3}}'));
+        $this->assertFalse(RegistrationTrash::hasUsableRecord(null));
+        $this->assertFalse(RegistrationTrash::hasUsableRecord('nao e json'));
+    }
+
+    function testNormalizaParametrosDaLista(): void
+    {
+        $this->assertSame(['busca' => '', 'filtro' => 'todas', 'pagina' => 1, 'limite' => 50], RegistrationTrash::normalizeListParams([]));
+        $this->assertSame(
+            ['busca' => 'abc', 'filtro' => 'sem_backup', 'pagina' => 3, 'limite' => 100],
+            RegistrationTrash::normalizeListParams(['busca' => '  abc ', 'filtro' => 'sem_backup', 'pagina' => '3', 'limite' => 5000])
+        );
+        $this->assertSame(
+            ['busca' => '', 'filtro' => 'todas', 'pagina' => 1, 'limite' => 1],
+            RegistrationTrash::normalizeListParams(['filtro' => 'x; DROP', 'pagina' => -2, 'limite' => 0])
+        );
+        $this->assertSame(RegistrationTrash::MAX_SEARCH_LENGTH, mb_strlen(RegistrationTrash::normalizeListParams(['busca' => str_repeat('a', 5000)])['busca']));
+    }
+
+    function testEscapaCuringasDaBusca(): void
+    {
+        $this->assertSame('%100\\%\\_x\\\\%', RegistrationTrash::likePattern('100%_x\\'));
+    }
+
+    function testReconheceListaDeNumerosNaBusca(): void
+    {
+        $this->assertSame(['on-1', 'on-2', 'on-3'], RegistrationTrash::searchNumbers("on-1; 2,\non-3"));
+        $this->assertSame(['on-5'], RegistrationTrash::searchNumbers('on-5'));
+        $this->assertNull(RegistrationTrash::searchNumbers('12345678000190'), 'dígitos soltos buscam também no CNPJ');
+        $this->assertNull(RegistrationTrash::searchNumbers('on-1 LIX ORG'), 'texto misturado é busca livre');
+        $this->assertNull(RegistrationTrash::searchNumbers(''));
+        $this->assertCount(RegistrationTrash::MAX_NUMBERS, RegistrationTrash::searchNumbers(implode(';', range(1, 300))));
+
+        [$sql, $params] = RegistrationTrash::searchClause('on-1; on-2');
+        $this->assertSame('AND number IN (:numeros)', $sql);
+        $this->assertSame(['numeros' => ['on-1', 'on-2']], $params);
+    }
+
+    function testMontaBuscaComCnpjSoQuandoHaDigitos(): void
+    {
+        $this->assertSame(['', [], []], RegistrationTrash::searchClause(''));
+
+        [$sql, $params] = RegistrationTrash::searchClause('Associação');
+        $this->assertStringNotContainsString('digitos', $sql);
+        $this->assertSame(['busca' => '%Associação%'], $params);
+
+        [$sql, $params] = RegistrationTrash::searchClause('12.345.678/0001-90');
+        $this->assertStringContainsString(':digitos', $sql);
+        $this->assertSame('%12345678000190%', $params['digitos']);
+    }
+
+    function testFiltroDoResumoSoAgeDentroDoGetSummary(): void
+    {
+        $this->assertTrue(RegistrationTrashSummaryFilter::calledFromSummary([
+            ['function' => 'addFilterConstraint', 'class' => RegistrationTrashSummaryFilter::class],
+            ['function' => 'getSummary', 'class' => 'MapasCulturais\\Entities\\Opportunity'],
+        ]));
+
+        $this->assertFalse(RegistrationTrashSummaryFilter::calledFromSummary([
+            ['function' => 'find', 'class' => 'Doctrine\\ORM\\EntityRepository'],
+            ['function' => 'getSummary', 'class' => 'MapasCulturais\\Entities\\EvaluationMethodConfiguration'],
+        ]));
+    }
+}
