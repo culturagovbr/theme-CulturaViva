@@ -22,3 +22,16 @@ A data impressa no certificado é o `createTimestamp` da relação entre a organ
 - Efeito: o certificado passa a mostrar a nova data. A coluna "Certificação" da listagem de organizações e a planilha exportada leem a primeira relação de selo da organização, que em geral é a de verificação; quando outro selo veio antes, esses dois lugares seguem mostrando a data daquele selo.
 - Auditoria: cada alteração grava no `blame_log` do MapasBlame a ação `rcv-data-certificacao alterar`, com a relação, a organização, o selo, a data anterior e a nova (a senha nunca é gravada).
 - Testes: `vendor/bin/phpunit src/themes/CulturaViva/tests`. O de integração roda contra o banco, numa transação desfeita no fim, com `CULTURAVIVA_INTEGRATION=1` e `HTTP_HOST` do subsite.
+## Lixeira de inscrições
+O core não prevê lixeira para inscrições. O tema usa o status `-10` para tirar inscrições da cadeia do Cadastro Nacional (`rcv.opportunityId` e fases filhas) de todos os fluxos, sem apagá-las.
+
+- Acesso: tela `Painel > Administração > Lixeira de inscrições` (`panel/rcv-lixeira`), liberada só para usuários com o papel `saasSuperAdmin`.
+- Confirmação: enviar e restaurar pedem a senha da conta (login local). Conta sem senha cadastrada, como a que entra só pelo gov.br, não consegue executar essas ações.
+- Auditoria: além do registro de requisições do MapasBlame, cada envio e restauração grava no `blame_log` a ação `rcv-lixeira <ação>` com os números, o resultado de cada um e o motivo (a senha nunca é gravada).
+- Envio: os números (`on-123`, separados por `;`, vírgula, espaço ou quebra de linha, até 200 por vez) passam por uma análise antes. Em todas as fases, a inscrição vai para `-10`, perde avaliadores (`valuers` e exceções), avaliações iniciadas e concluídas e as permissões dos avaliadores; avaliações enviadas ficam. O motivo é obrigatório.
+- Bloqueios: número inexistente, inscrição já na lixeira e inscrição certificada que é a única certificação da organização (nesse caso, usar a desativação do ponto). Selos nunca são alterados.
+- Vínculo da organização: se o `rcv_registration` da organização aponta para a inscrição, ele passa para outra inscrição ativa da organização (certificada do mesmo tipo, certificada de outro tipo ou a mais recente) ou é removido.
+- Backup e restauração: o estado anterior fica no metadado `rcv_lixeira` de cada fase, com quem enviou, quando e o motivo. A aba "Na lixeira" restaura a partir dele. Inscrições colocadas em `-10` fora da ferramenta não têm backup.
+- Proteções (`RegistrationTrash.php`): não permite avaliar inscrição na lixeira nem tirá-la do `-10` pela entidade, e remove avaliadores atribuídos a ela após cada redistribuição.
+- Resumo da oportunidade: o filtro `RegistrationTrashSummaryFilter` tira o `-10` apenas da contagem de `Opportunity::getSummary`. Se a lógica do filtro mudar mantendo o nome `rcv_lixeira_resumo`, limpar o cache de consultas do Doctrine no deploy.
+- Testes: `vendor/bin/phpunit src/themes/CulturaViva/tests`. Os de integração rodam contra o banco, numa transação desfeita no fim, com `CULTURAVIVA_INTEGRATION=1` e `HTTP_HOST` do subsite.
