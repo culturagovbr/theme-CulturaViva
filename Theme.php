@@ -710,25 +710,26 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $full_name_field_name = 'field_'.$full_name_field[0]['id'];
                 
                 $app->disableAccessControl();
-                $conn->exec("UPDATE registration_meta SET value = '{$cnpj}' WHERE object_id = {$registration->id} AND key = '{$cnpj_field_name}'");
+                $update_field = 'UPDATE registration_meta SET value = :value WHERE object_id = :registration_id AND key = :field_name';
+
+                $conn->executeStatement($update_field, ['value' => $cnpj, 'registration_id' => $registration->id, 'field_name' => $cnpj_field_name]);
                 $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $cnpj_field_name));
 
-                $conn->exec("UPDATE registration_meta SET value = '{$full_name}' WHERE object_id = {$registration->id} AND key = '{$full_name_field_name}'");
+                $conn->executeStatement($update_field, ['value' => $full_name, 'registration_id' => $registration->id, 'field_name' => $full_name_field_name]);
                 $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $full_name_field_name));
 
+                // O CNPJ só vai para a organização quando a alteração for aprovada (ver hook status(approved))
+                $registration->rcv_cnpj_solicitado = ['cnpj' => $cnpj, 'nomeCompleto' => $full_name];
                 $registration->status = Registration::STATUS_SENT;
                 $registration->range = $app->config['rcv.rangesMap']['alterar-cnpj'];
                 $registration->save(true);
 
-                $agent->cnpj = $cnpj;
-                $agent->nomeCompleto = $full_name;
-                $agent->save(true);
                 $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
                 
                 $data = [
                     "owner_name" => $registration->owner->name,
                     "agent_name" => $agent->name,
-                    "agent_cnpj" => $agent->cnpj,
+                    "agent_cnpj" => $cnpj,
                     "recipient" => $registration->owner->email,
                     "email_destinatario" => $user_email
                     
@@ -1291,6 +1292,18 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
+            // Alteração de CNPJ aprovada: só agora o CNPJ pedido vai para a organização
+            if ($cnpj_solicitado = $this->rcv_cnpj_solicitado) {
+                $app->disableAccessControl();
+                $coletivo->cnpj = $cnpj_solicitado['cnpj'];
+                $coletivo->nomeCompleto = $cnpj_solicitado['nomeCompleto'];
+                $coletivo->save(true);
+
+                $this->rcv_cnpj_solicitado = null;
+                $this->save(true);
+                $app->enableAccessControl();
+            }
+
             foreach ($coletivo->getSealRelations() as $relation) {
                 if ($relation->seal->id == $app->config['rcv.verificationSeals']['desativado']) {
                     $coletivo->removeSealRelation($relation->seal);
@@ -1360,6 +1373,14 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $opportunity_id = $app->config['rcv.opportunityId'];
             if($this->opportunity->id != $opportunity_id) {
                 return;
+            }
+
+            // Alteração de CNPJ recusada: descarta o pedido e a organização mantém o CNPJ anterior
+            if ($this->rcv_cnpj_solicitado) {
+                $app->disableAccessControl();
+                $this->rcv_cnpj_solicitado = null;
+                $this->save(true);
+                $app->enableAccessControl();
             }
 
             // Envia notificação de inscrição não aprovada
@@ -3052,6 +3073,12 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
         
         $this->registerRegistrationMetadata('rcv_locked_fields', [
             'label' => 'Campos bloqueados',
+            'type' => 'array',
+            'readonly' => true
+        ]);
+
+        $this->registerRegistrationMetadata('rcv_cnpj_solicitado', [
+            'label' => 'CNPJ solicitado na alteração de CNPJ',
             'type' => 'array',
             'readonly' => true
         ]);
