@@ -67,9 +67,12 @@ app.component('entity-actions', {
     methods: {
         save() {
             const event = new Event("entitySave");
-            this.entity.save().then(() => {
+
+            const updateMethod = $MAPAS.config['entity-actions']['updateMethod'];
+
+            this.entity.save({updateMethod}).then(() => {
+                this.entity.validate();
                 window.dispatchEvent(event);
-                //this.exit();
             });
         },
         exit() {
