@@ -540,6 +540,50 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->errorJson(false);
         });
 
+        // Impede vincular a um cadastro novo uma organização do tipo oposto (coletivo sem CNPJ x entidade com CNPJ).
+        // A tela já desabilita essas organizações; aqui fica a mesma regra para quem chamar a rota direto.
+        $app->hook('POST(registration.createAgentRelation):before', function () use ($app) {
+            if (($this->postData['group'] ?? null) !== 'coletivo') {
+                return;
+            }
+
+            $registration = $app->repo('Registration')->find($this->urlData['id'] ?? 0);
+            $agent = $app->repo('Agent')->find($this->postData['agentId'] ?? 0);
+            $opportunity_id = (int) $app->config['rcv.opportunityId'];
+
+            if (!$registration || !$agent || $registration->opportunity->id != $opportunity_id || $registration->status != Registration::STATUS_DRAFT) {
+                return;
+            }
+
+            $categories_map = $app->config['rcv.categoriesMap'];
+            $subscription_key = array_search($registration->category, $categories_map, true);
+            if ($subscription_key === false) {
+                return;
+            }
+
+            $registrations = $app->em->getConnection()->fetchAllAssociative("
+                SELECT r.category, r.status
+                FROM registration r
+                JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = :object_type AND ar.type = 'coletivo'
+                WHERE ar.agent_id = :agent_id AND r.opportunity_id = :opportunity_id AND r.id <> :registration_id
+            ", [
+                'object_type' => Registration::class,
+                'agent_id' => $agent->id,
+                'opportunity_id' => $opportunity_id,
+                'registration_id' => $registration->id,
+            ]);
+
+            $conflict = OrganizationCategory::conflict($subscription_key, trim((string) $agent->cnpj) !== '', $registrations, $categories_map);
+
+            if ($conflict === OrganizationCategory::IS_COLETIVO) {
+                $this->errorJson(i::__('Esta organização já está em um cadastro de coletivo sem CNPJ. Se esse cadastro ainda for rascunho, exclua-o em Meus cadastros; se estiver em análise, aguarde o resultado; se já estiver certificado, use "Alterar o tipo de organização" na página de Atualização de cadastro.'), 403);
+            }
+
+            if ($conflict === OrganizationCategory::IS_ENTIDADE) {
+                $this->errorJson(i::__('Esta organização tem CNPJ ou já está em um cadastro de entidade. Para cadastrá-la, escolha a opção de Ponto ou Pontão com CNPJ.'), 403);
+            }
+        });
+
         // Pré-validação CNPJ: inscrições RCV (coletivo + meta). Alterar CNPJ: excludeAgentId + categoria pelo coletivo.
         // Novo cadastro: opcional subscriptionType ponto-entidade|pontao (bloqueia só essa modalidade se já existir).
         // Sem subscriptionType: só bloqueia “lotado” (já tem Ponto e Pontão) ou 2+ Pontões — não bloqueia só por vários Pontos (ex.: permite seguir para Pontão no curl/UI legada).

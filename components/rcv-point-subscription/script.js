@@ -131,7 +131,23 @@ app.component('rcv-point-subscription' , {
             return result;
         },
 
+        // Uma organização é coletivo sem CNPJ ou entidade com CNPJ, nunca as duas (mesma regra de OrganizationCategory.php)
+        categoryConflict(entity) {
+            const coletivo = this.categoriesMap['ponto-coletivo'];
+            const active = (this.hasRegistrations || []).filter(item => item.agentId == entity.id && item.status >= 0 && item.status != 3);
+
+            if (this.subscriptionType == 'ponto-coletivo') {
+                return this.hasCNPJ(entity) || active.some(item => item.category != coletivo) ? 'entidade' : null;
+            }
+
+            return active.some(item => item.category == coletivo) ? 'coletivo' : null;
+        },
+
         disabledEntity(entity, entities) {
+            if (this.categoryConflict(entity)) {
+                return true;
+            }
+
             if(!this.hasRegistrationCategory(entity) && this.subscriptionType == 'ponto-coletivo') {
                 return false;
             }
@@ -364,6 +380,11 @@ app.component('rcv-point-subscription' , {
             } else {
                 if(!_agent) {
                     messages.error(this.text('Cadastre uma organização ou selecione uma já existente'));
+                    this.isLoading = false;
+                    return;
+                } else if (this.categoryConflict(_agent)) {
+                    // a organização pode ter sido marcada sozinha pelo CNPJ; para antes de gravar qualquer coisa nela
+                    messages.error(this.text(this.categoryConflict(_agent) == 'coletivo' ? 'Organização já é coletivo sem CNPJ' : 'Organização tem CNPJ'));
                     this.isLoading = false;
                     return;
                 } else {
