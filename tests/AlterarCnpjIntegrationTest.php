@@ -91,7 +91,7 @@ class AlterarCnpjIntegrationTest extends TestCase
         $registration = $app->repo('Registration')->find($registration_id);
 
         $app->disableAccessControl();
-        $registration->rcv_cnpj_solicitado = ['cnpj' => self::CNPJ_SOLICITADO, 'nomeCompleto' => self::NOME_SOLICITADO];
+        $app->view->setRcvCnpjRequest($registration, ['cnpj' => self::CNPJ_SOLICITADO, 'nomeCompleto' => self::NOME_SOLICITADO]);
         $registration->save(true);
         $app->enableAccessControl();
 
@@ -144,6 +144,71 @@ class AlterarCnpjIntegrationTest extends TestCase
 
         $this->assertSame($cnpj_antes, $this->orgMeta($row['org_id'], 'cnpj'));
         $this->assertEmpty($this->pendingRequest($row['id']));
+    }
+
+    // é o que a API da inscrição faz com os dados do PATCH; o pedido não pode vir por aí
+    function testGravacaoDiretaDoPedidoEIgnorada(): void
+    {
+        $app = self::$app;
+        $row = $this->sentRegistration();
+        $registration = $app->repo('Registration')->find($row['id']);
+
+        $app->disableAccessControl();
+        $registration->rcv_cnpj_solicitado = ['cnpj' => self::CNPJ_SOLICITADO, 'nomeCompleto' => self::NOME_SOLICITADO];
+        $registration->save(true);
+        $app->enableAccessControl();
+
+        $this->assertEmpty($this->pendingRequest($row['id']));
+    }
+
+    function testCnpjPendenteContaComoEmUsoNaChecagemDeDuplicidade(): void
+    {
+        $app = self::$app;
+        $digits = preg_replace('/\D/', '', self::CNPJ_SOLICITADO);
+        $row = $this->sentRegistration();
+        $em_uso_antes = $app->view->countRcvRegistrationsWithColetivoCnpjFromOtherResponsible($app, $digits, null);
+
+        $this->requestChange($row['id']);
+
+        $this->assertSame($em_uso_antes + 1, $app->view->countRcvRegistrationsWithColetivoCnpjFromOtherResponsible($app, $digits, null));
+    }
+
+    // outra organização, na mesma categoria, tenta enviar cadastro com o CNPJ que está pendente no pedido
+    function testEnvioComCnpjPendenteEmOutroPedidoEBloqueado(): void
+    {
+        $app = self::$app;
+        $row = $this->sentRegistration();
+        $this->requestChange($row['id']);
+        $pedido = $app->repo('Registration')->find($row['id']);
+
+        $outra = $this->conn()->fetchAssociative("
+            SELECT r.id, ar.agent_id AS org_id
+            FROM registration r
+            JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = 'MapasCulturais\\Entities\\Registration' AND ar.type = 'coletivo'
+            WHERE r.opportunity_id = ? AND r.category = ? AND r.id <> ? AND ar.agent_id <> ?
+            ORDER BY r.id LIMIT 1
+        ", [(int) $app->config['rcv.opportunityId'], $pedido->category, $row['id'], $row['org_id']]);
+
+        if (!$outra) {
+            $this->markTestSkipped('Sem outra inscrição com organização na mesma categoria.');
+        }
+
+        $app->disableAccessControl();
+        $org = $app->repo('Agent')->find($outra['org_id']);
+        $org->cnpj = self::CNPJ_SOLICITADO;
+        $org->save(true);
+        $app->enableAccessControl();
+        $this->conn()->executeStatement("UPDATE registration SET range = ? WHERE id = ?", [$app->config['rcv.rangesMap']['cadastro'], $outra['id']]);
+        $app->em->clear();
+
+        $registration = $app->repo('Registration')->find($outra['id']);
+        // o cnpj da organização é privado; no envio real quem lê é o dono logado
+        $errors = [];
+        $app->disableAccessControl();
+        $app->applyHookBoundTo($registration, 'entity(Registration).sendValidationErrors', [&$errors]);
+        $app->enableAccessControl();
+
+        $this->assertArrayHasKey('agent_cnpj', $errors);
     }
 
     function testAprovacaoSemPedidoNaoMexeNoCnpj(): void

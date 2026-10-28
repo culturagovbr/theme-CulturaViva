@@ -103,13 +103,15 @@ class OrganizationCategoryIntegrationTest extends TestCase
         return $registration;
     }
 
-    // dispara o hook como o core faz ao receber o pedido de vínculo; devolve o status HTTP ou null se passou
-    private function link(Registration $registration, Agent $org): ?int
+    // dispara o hook como o core faz ao receber o pedido de vínculo; devolve o status HTTP ou null se passou.
+    // $url_args imita argumentos na URL, que no core têm prioridade sobre o corpo em $controller->data
+    private function link(Registration $registration, Agent $org, array $url_args = []): ?int
     {
         $app = self::$app;
         $controller = $app->controller('registration');
         $controller->setRequestData(['id' => $registration->id]);
         $controller->postData = ['group' => 'coletivo', 'agentId' => $org->id];
+        $controller->data = ['id' => $registration->id] + $url_args + $controller->postData;
 
         try {
             $app->applyHookBoundTo($controller, self::HOOK);
@@ -155,6 +157,16 @@ class OrganizationCategoryIntegrationTest extends TestCase
         $inabilitado = $this->organization();
         $this->registration('ponto-coletivo', $inabilitado, Registration::STATUS_NOTAPPROVED);
         $this->assertNull($this->link($this->registration('pontao'), $inabilitado), 'Pontão em organização com coletivo inabilitado');
+    }
+
+    function testRecusaOrganizacaoPassadaNaUrl(): void
+    {
+        $org = $this->organization();
+        $this->registration('ponto-coletivo', $org);
+        $outra = $this->organization();
+
+        // corpo com outra organização e a do coletivo na URL: o core vincula a da URL
+        $this->assertSame(403, $this->link($this->registration('pontao'), $outra, ['agentId' => $org->id]));
     }
 
     function testNaoAlcancaInscricaoQueJaFoiEnviada(): void
