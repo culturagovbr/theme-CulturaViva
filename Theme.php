@@ -720,51 +720,9 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $full_name = $this->data['apiInfo']['nomeEmpresarial'];
 
                 $agent = $registration->relatedAgents['coletivo'][0];
-                $conn = $app->em->getConnection();
-                $cnpj_field = $conn->fetchAll("
-                    SELECT 
-                        *
-                    FROM 
-                        registration_field_configuration
-                    WHERE 
-                        field_type = 'agent-collective-field'
-                        AND 
-                            opportunity_id = {$app->config['rcv.opportunityId']}
-                        AND 
-                            jsonb_extract_path_text(config::jsonb, 'entityField') = 'cnpj'
-                ");
-                $cnpj_field_name = 'field_'.$cnpj_field[0]['id'];
 
-                $full_name_field = $conn->fetchAll("
-                    SELECT 
-                        *
-                    FROM 
-                        registration_field_configuration
-                    WHERE 
-                        field_type = 'agent-collective-field'
-                        AND 
-                            opportunity_id = {$app->config['rcv.opportunityId']}
-                        AND 
-                            jsonb_extract_path_text(config::jsonb, 'entityField') = 'nomeCompleto'
-                        AND EXISTS (
-                            SELECT 
-                                1
-                            FROM 
-                                jsonb_array_elements_text(categories::jsonb) AS category
-                            WHERE 
-                                category = '{$registration->category}'
-                        );
-                ");
-                $full_name_field_name = 'field_'.$full_name_field[0]['id'];
-                
                 $app->disableAccessControl();
-                $update_field = 'UPDATE registration_meta SET value = :value WHERE object_id = :registration_id AND key = :field_name';
-
-                $conn->executeStatement($update_field, ['value' => $cnpj, 'registration_id' => $registration->id, 'field_name' => $cnpj_field_name]);
-                $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $cnpj_field_name));
-
-                $conn->executeStatement($update_field, ['value' => $full_name, 'registration_id' => $registration->id, 'field_name' => $full_name_field_name]);
-                $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $full_name_field_name));
+                $theme->writeRcvCnpjFields($registration, $cnpj, $full_name);
 
                 // O CNPJ só vai para a organização quando a alteração for aprovada (ver hook status(approved))
                 $theme->setRcvCnpjRequest($registration, ['cnpj' => $cnpj, 'nomeCompleto' => $full_name]);
@@ -1423,11 +1381,16 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
-            // Alteração de CNPJ recusada: descarta o pedido e a organização mantém o CNPJ anterior
+            // Alteração de CNPJ recusada: descarta o pedido e a organização mantém o CNPJ anterior,
+            // que volta também para os campos da inscrição (o pedido tinha gravado neles o CNPJ recusado)
             if ($this->rcv_cnpj_solicitado) {
                 $app->disableAccessControl();
                 $theme->setRcvCnpjRequest($this, null);
                 $this->save(true);
+
+                if ($coletivo = $this->relatedAgents['coletivo'][0] ?? null) {
+                    $theme->writeRcvCnpjFields($this, $coletivo->cnpj, $coletivo->nomeCompleto);
+                }
                 $app->enableAccessControl();
             }
 
@@ -3137,6 +3100,38 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return $value ? json_encode((array) $value) : null;
             },
         ]);
+    }
+
+    /**
+     * Grava o CNPJ e o nome completo nos campos da inscrição que mostram os dados da organização.
+     * Vai direto no banco porque gravar pelo campo levaria o valor também para a organização.
+     */
+    public function writeRcvCnpjFields(Registration $registration, ?string $cnpj, ?string $full_name): void
+    {
+        $app = App::i();
+        $conn = $app->em->getConnection();
+
+        $field_id = "
+            SELECT id
+            FROM registration_field_configuration
+            WHERE field_type = 'agent-collective-field'
+              AND opportunity_id = :opportunity_id
+              AND jsonb_extract_path_text(config::jsonb, 'entityField') = :entity_field
+        ";
+        $params = ['opportunity_id' => (int) $app->config['rcv.opportunityId']];
+
+        $cnpj_field_name = 'field_' . $conn->fetchOne($field_id, $params + ['entity_field' => 'cnpj']);
+        $full_name_field_name = 'field_' . $conn->fetchOne($field_id . "
+              AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(categories::jsonb) AS category WHERE category = :category)
+        ", $params + ['entity_field' => 'nomeCompleto', 'category' => $registration->category]);
+
+        $update_field = 'UPDATE registration_meta SET value = :value WHERE object_id = :registration_id AND key = :field_name';
+
+        $conn->executeStatement($update_field, ['value' => $cnpj, 'registration_id' => $registration->id, 'field_name' => $cnpj_field_name]);
+        $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $cnpj_field_name));
+
+        $conn->executeStatement($update_field, ['value' => $full_name, 'registration_id' => $registration->id, 'field_name' => $full_name_field_name]);
+        $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $full_name_field_name));
     }
 
     /**

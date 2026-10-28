@@ -211,6 +211,31 @@ class AlterarCnpjIntegrationTest extends TestCase
         $this->assertArrayHasKey('agent_cnpj', $errors);
     }
 
+    // o pedido grava o CNPJ novo nos campos da inscrição; recusado, eles voltam a mostrar o CNPJ da organização
+    function testRecusaDevolveOCnpjDaOrganizacaoAosCamposDaInscricao(): void
+    {
+        $app = self::$app;
+        $row = $this->sentRegistration();
+        $cnpj_field = 'field_' . $this->conn()->fetchOne("
+            SELECT id FROM registration_field_configuration
+            WHERE field_type = 'agent-collective-field' AND opportunity_id = ? AND jsonb_extract_path_text(config::jsonb, 'entityField') = 'cnpj'
+        ", [(int) $app->config['rcv.opportunityId']]);
+
+        if (!$this->conn()->fetchOne("SELECT 1 FROM registration_meta WHERE object_id = ? AND key = ?", [$row['id'], $cnpj_field])) {
+            $this->markTestSkipped('A inscrição não tem o campo de CNPJ preenchido.');
+        }
+
+        $registration = $this->requestChange($row['id']);
+        $app->disableAccessControl();
+        $app->view->writeRcvCnpjFields($registration, self::CNPJ_SOLICITADO, self::NOME_SOLICITADO);
+        $registration->setStatusToNotApproved();
+        $app->enableAccessControl();
+
+        $campo = $this->conn()->fetchOne("SELECT value FROM registration_meta WHERE object_id = ? AND key = ?", [$row['id'], $cnpj_field]);
+        $this->assertSame((string) $this->orgMeta($row['org_id'], 'cnpj'), (string) $campo);
+        $this->assertNotSame(self::CNPJ_SOLICITADO, $campo);
+    }
+
     function testAprovacaoSemPedidoNaoMexeNoCnpj(): void
     {
         $app = self::$app;
