@@ -52,6 +52,9 @@ $_config = [
     ],
     'rcv.importerSeal' => env('RCV_IMPORTER_SEAL', 105),
     'rcv.waitingUpdateSeal' => env('RCV_WAITING_UPDATE_SEAL', 117),
+    // confirmação por senha nas ações administrativas: mesmos limites do login local (MultipleLocalAuth)
+    'rcv.passwordAttempts' => env('AUTH_NUMBER_ATTEMPTS', 5),
+    'rcv.passwordBlockTime' => env('AUTH_BLOCK_TIME', 900),
     'rcv.apiReturnedFieldsUsed' => [ // Campo retornados da API que são salvos no cadastro já no retorno
         'nomeCompleto' => ['disable' => true, 'rfDataField' => 'nomeEmpresarial'],
         'emailPublico' => ['disable' => false, 'rfDataField' => 'correioEletronico'],
