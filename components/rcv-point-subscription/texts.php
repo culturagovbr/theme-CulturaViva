@@ -14,5 +14,7 @@ return [
     'Ops! Identificamos uma inconsistência nos seus dados' => i::__('Ops! Identificamos uma inconsistência nos seus dados'),
     'Não é possível continuar o cadastro' => i::__('Não é possível continuar o cadastro'),
     'CNPJ já vinculado a outra organização' => i::__('CNPJ já vinculado a outra organização'),
+    'Organização já é coletivo sem CNPJ' => i::__('Esta organização já está em um cadastro de coletivo sem CNPJ. Se esse cadastro ainda for rascunho, exclua-o em Meus cadastros; se estiver em análise, aguarde o resultado; se já estiver certificado, use "Alterar o tipo de organização" na página de Atualização de cadastro.'),
+    'Organização tem CNPJ' => i::__('Esta organização tem CNPJ ou já está em um cadastro de entidade. Cadastre-a como Ponto ou Pontão com CNPJ.'),
     'Este CNPJ já está vinculado a outra organização.<br> Se precisar de ajuda para regularizar o cadastro, entre em contato com <a href="mailto:suporte.culturaviva@cultura.gov.br" class="rcv-cnpj-conflict-modal__support-mail"><strong>suporte.culturaviva@cultura.gov.br</strong></a>.' => i::__('Este CNPJ já está vinculado a outra organização.<br> Se precisar de ajuda para regularizar o cadastro, entre em contato com <a href="mailto:suporte.culturaviva@cultura.gov.br" class="rcv-cnpj-conflict-modal__support-mail"><strong>suporte.culturaviva@cultura.gov.br</strong></a>.'),
 ];

@@ -72,6 +72,7 @@ $this->import('
                                 <template #default='{ entities }'>
                                     <label class="input__label input__radioLabel" v-for="entity in entities" :key="entity.__objectId">
                                         <input type="radio" name="entity" :value="entity.id" @change="getValueRadio($event, entity)" :checked="checkedEntity(entity)" :disabled="disabledEntity(entity,entities)"><?= i::__('ID ') ?>{{entity.id}} - {{entity.name}} {{entity.cnpj ? '(CNPJ ' + entity.cnpj + ')' : '(Sem CNPJ informado)'}}
+                                        <small v-if="categoryConflict(entity)" style="grid-column: 2; font-weight: normal"><?= i::__('Esta organização já está em um cadastro de coletivo sem CNPJ. Se esse cadastro ainda for rascunho, exclua-o em Meus cadastros; se estiver em análise, aguarde o resultado; se já estiver certificado, use "Alterar o tipo de organização" na página de Atualização de cadastro.') ?></small>
                                     </label>
 
                                     <label class="input__label input__radioLabel" v-if="!selectedEntity || !hasRegistrationCategory(entity)">
@@ -175,6 +176,7 @@ $this->import('
                                 <template #default='{ entities }'>
                                     <label class="input__label input__radioLabel" v-for="entity in entities" :key="entity.__objectId">
                                         <input type="radio" name="entity" :value="entity.id" @change="getValueRadio($event, entity)" :disabled="disabledEntity(entity,entities)"><?= i::__('ID: ') ?>{{entity.id}} <span v-if="entity.name">- {{entity.name}}</span>
+                                        <small v-if="categoryConflict(entity)" style="grid-column: 2; font-weight: normal"><?= i::__('Esta organização tem CNPJ ou já está em um cadastro de entidade. Cadastre-a como Ponto ou Pontão com CNPJ.') ?></small>
                                     </label>
 
                                     <label class="input__label input__radioLabel">
@@ -291,6 +293,7 @@ $this->import('
                                 <template #default='{ entities }'>
                                     <label class="input__label input__radioLabel" v-for="entity in entities" :key="entity.__objectId">
                                         <input type="radio" name="entity" :value="entity.id" @input="getValueRadio($event, entity)" :checked="checkedEntity(entity)" :disabled="disabledEntity(entity,entities)"><?= i::__('ID ') ?>{{entity.id}} - {{entity.name}} {{entity.cnpj ? '(CNPJ ' + entity.cnpj + ')' : '(Sem CNPJ informado)'}}
+                                        <small v-if="categoryConflict(entity)" style="grid-column: 2; font-weight: normal"><?= i::__('Esta organização já está em um cadastro de coletivo sem CNPJ. Se esse cadastro ainda for rascunho, exclua-o em Meus cadastros; se estiver em análise, aguarde o resultado; se já estiver certificado, use "Alterar o tipo de organização" na página de Atualização de cadastro.') ?></small>
                                     </label>
 
                                     <label class="input__label input__radioLabel" v-if="!selectedEntity || !hasRegistrationCategory(entity)">

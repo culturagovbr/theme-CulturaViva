@@ -25,6 +25,9 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
 
     protected Opportunity $opportunity;
 
+    // liberado só dentro de setRcvCnpjRequest(); fora dali o metadado rcv_cnpj_solicitado ignora escrita
+    private bool $rcvCnpjRequestWritable = false;
+
     static function getThemeFolder()
     {
         return __DIR__;
@@ -540,6 +543,51 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $this->errorJson(false);
         });
 
+        // Impede vincular a um cadastro novo uma organização do tipo oposto (coletivo sem CNPJ x entidade com CNPJ).
+        // A tela já desabilita essas organizações; aqui fica a mesma regra para quem chamar a rota direto.
+        $app->hook('POST(registration.createAgentRelation):before', function () use ($app) {
+            if (($this->postData['group'] ?? null) !== 'coletivo') {
+                return;
+            }
+
+            // mesmas chaves que o core usa no createAgentRelation (os argumentos da URL têm prioridade sobre o corpo)
+            $registration = $app->repo('Registration')->find($this->data['id'] ?? 0);
+            $agent = $app->repo('Agent')->find($this->data['agentId'] ?? 0);
+            $opportunity_id = (int) $app->config['rcv.opportunityId'];
+
+            if (!$registration || !$agent || $registration->opportunity->id != $opportunity_id || $registration->status != Registration::STATUS_DRAFT) {
+                return;
+            }
+
+            $categories_map = $app->config['rcv.categoriesMap'];
+            $subscription_key = array_search($registration->category, $categories_map, true);
+            if ($subscription_key === false) {
+                return;
+            }
+
+            $registrations = $app->em->getConnection()->fetchAllAssociative("
+                SELECT r.category, r.status
+                FROM registration r
+                JOIN agent_relation ar ON ar.object_id = r.id AND ar.object_type = :object_type AND ar.type = 'coletivo'
+                WHERE ar.agent_id = :agent_id AND r.opportunity_id = :opportunity_id AND r.id <> :registration_id
+            ", [
+                'object_type' => Registration::class,
+                'agent_id' => $agent->id,
+                'opportunity_id' => $opportunity_id,
+                'registration_id' => $registration->id,
+            ]);
+
+            $conflict = OrganizationCategory::conflict($subscription_key, trim((string) $agent->cnpj) !== '', $registrations, $categories_map);
+
+            if ($conflict === OrganizationCategory::IS_COLETIVO) {
+                $this->errorJson(i::__('Esta organização já está em um cadastro de coletivo sem CNPJ. Se esse cadastro ainda for rascunho, exclua-o em Meus cadastros; se estiver em análise, aguarde o resultado; se já estiver certificado, use "Alterar o tipo de organização" na página de Atualização de cadastro.'), 403);
+            }
+
+            if ($conflict === OrganizationCategory::IS_ENTIDADE) {
+                $this->errorJson(i::__('Esta organização tem CNPJ ou já está em um cadastro de entidade. Cadastre-a como Ponto ou Pontão com CNPJ.'), 403);
+            }
+        });
+
         // Pré-validação CNPJ: inscrições RCV (coletivo + meta). Alterar CNPJ: excludeAgentId + categoria pelo coletivo.
         // Novo cadastro: opcional subscriptionType ponto-entidade|pontao (bloqueia só essa modalidade se já existir).
         // Sem subscriptionType: só bloqueia “lotado” (já tem Ponto e Pontão) ou 2+ Pontões — não bloqueia só por vários Pontos (ex.: permite seguir para Pontão no curl/UI legada).
@@ -672,63 +720,22 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 $full_name = $this->data['apiInfo']['nomeEmpresarial'];
 
                 $agent = $registration->relatedAgents['coletivo'][0];
-                $conn = $app->em->getConnection();
-                $cnpj_field = $conn->fetchAll("
-                    SELECT 
-                        *
-                    FROM 
-                        registration_field_configuration
-                    WHERE 
-                        field_type = 'agent-collective-field'
-                        AND 
-                            opportunity_id = {$app->config['rcv.opportunityId']}
-                        AND 
-                            jsonb_extract_path_text(config::jsonb, 'entityField') = 'cnpj'
-                ");
-                $cnpj_field_name = 'field_'.$cnpj_field[0]['id'];
 
-                $full_name_field = $conn->fetchAll("
-                    SELECT 
-                        *
-                    FROM 
-                        registration_field_configuration
-                    WHERE 
-                        field_type = 'agent-collective-field'
-                        AND 
-                            opportunity_id = {$app->config['rcv.opportunityId']}
-                        AND 
-                            jsonb_extract_path_text(config::jsonb, 'entityField') = 'nomeCompleto'
-                        AND EXISTS (
-                            SELECT 
-                                1
-                            FROM 
-                                jsonb_array_elements_text(categories::jsonb) AS category
-                            WHERE 
-                                category = '{$registration->category}'
-                        );
-                ");
-                $full_name_field_name = 'field_'.$full_name_field[0]['id'];
-                
                 $app->disableAccessControl();
-                $conn->exec("UPDATE registration_meta SET value = '{$cnpj}' WHERE object_id = {$registration->id} AND key = '{$cnpj_field_name}'");
-                $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $cnpj_field_name));
+                $theme->writeRcvCnpjFields($registration, $cnpj, $full_name);
 
-                $conn->exec("UPDATE registration_meta SET value = '{$full_name}' WHERE object_id = {$registration->id} AND key = '{$full_name_field_name}'");
-                $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $full_name_field_name));
-
+                // O CNPJ só vai para a organização quando a alteração for aprovada (ver hook status(approved))
+                $theme->setRcvCnpjRequest($registration, ['cnpj' => $cnpj, 'nomeCompleto' => $full_name]);
                 $registration->status = Registration::STATUS_SENT;
                 $registration->range = $app->config['rcv.rangesMap']['alterar-cnpj'];
                 $registration->save(true);
 
-                $agent->cnpj = $cnpj;
-                $agent->nomeCompleto = $full_name;
-                $agent->save(true);
                 $user_email = $registration->owner->emailPrivado ?: $registration->owner->emailPublico ?: $registration->owner->email ?: '';
                 
                 $data = [
                     "owner_name" => $registration->owner->name,
                     "agent_name" => $agent->name,
-                    "agent_cnpj" => $agent->cnpj,
+                    "agent_cnpj" => $cnpj,
                     "recipient" => $registration->owner->email,
                     "email_destinatario" => $user_email
                     
@@ -1291,6 +1298,18 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 return;
             }
 
+            // Alteração de CNPJ aprovada: só agora o CNPJ pedido vai para a organização
+            if ($cnpj_solicitado = $this->rcv_cnpj_solicitado) {
+                $app->disableAccessControl();
+                $coletivo->cnpj = $cnpj_solicitado['cnpj'];
+                $coletivo->nomeCompleto = $cnpj_solicitado['nomeCompleto'];
+                $coletivo->save(true);
+
+                $theme->setRcvCnpjRequest($this, null);
+                $this->save(true);
+                $app->enableAccessControl();
+            }
+
             foreach ($coletivo->getSealRelations() as $relation) {
                 if ($relation->seal->id == $app->config['rcv.verificationSeals']['desativado']) {
                     $coletivo->removeSealRelation($relation->seal);
@@ -1360,6 +1379,19 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             $opportunity_id = $app->config['rcv.opportunityId'];
             if($this->opportunity->id != $opportunity_id) {
                 return;
+            }
+
+            // Alteração de CNPJ recusada: descarta o pedido e a organização mantém o CNPJ anterior,
+            // que volta também para os campos da inscrição (o pedido tinha gravado neles o CNPJ recusado)
+            if ($this->rcv_cnpj_solicitado) {
+                $app->disableAccessControl();
+                $theme->setRcvCnpjRequest($this, null);
+                $this->save(true);
+
+                if ($coletivo = $this->relatedAgents['coletivo'][0] ?? null) {
+                    $theme->writeRcvCnpjFields($this, $coletivo->cnpj, $coletivo->nomeCompleto);
+                }
+                $app->enableAccessControl();
             }
 
             // Envia notificação de inscrição não aprovada
@@ -2299,10 +2331,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
                 INNER JOIN agent_relation ar ON ar.object_id = r.id
                     AND ar.object_type = '{$registrationObjectType}'
                     AND ar.type = 'coletivo'
-                INNER JOIN agent_meta am ON am.object_id = ar.agent_id
-                    AND am.key IN ('cnpj', 'documento')
-                    AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
                 WHERE r.opportunity_id = :oppId
+                  AND {$theme->rcvColetivoCnpjMatchSql()}
                   AND r.category = :category
                   AND r.status > 0
                   AND r.status != :notApproved
@@ -3055,6 +3085,67 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             'type' => 'array',
             'readonly' => true
         ]);
+
+        // O readonly só trava o campo na tela; a API da inscrição gravaria o pedido e a aprovação aplicaria
+        // na organização um CNPJ sem consulta à Receita. Por isso só setRcvCnpjRequest() consegue alterar o valor.
+        $this->registerRegistrationMetadata('rcv_cnpj_solicitado', [
+            'label' => 'CNPJ solicitado na alteração de CNPJ',
+            'type' => 'array',
+            'readonly' => true,
+            'serialize' => function ($value, $registration) {
+                if (!$this->rcvCnpjRequestWritable) {
+                    $value = $registration->rcv_cnpj_solicitado;
+                }
+
+                return $value ? json_encode((array) $value) : null;
+            },
+        ]);
+    }
+
+    /**
+     * Grava o CNPJ e o nome completo nos campos da inscrição que mostram os dados da organização.
+     * Vai direto no banco porque gravar pelo campo levaria o valor também para a organização.
+     */
+    public function writeRcvCnpjFields(Registration $registration, ?string $cnpj, ?string $full_name): void
+    {
+        $app = App::i();
+        $conn = $app->em->getConnection();
+
+        $field_id = "
+            SELECT id
+            FROM registration_field_configuration
+            WHERE field_type = 'agent-collective-field'
+              AND opportunity_id = :opportunity_id
+              AND jsonb_extract_path_text(config::jsonb, 'entityField') = :entity_field
+        ";
+        $params = ['opportunity_id' => (int) $app->config['rcv.opportunityId']];
+
+        $cnpj_field_name = 'field_' . $conn->fetchOne($field_id, $params + ['entity_field' => 'cnpj']);
+        $full_name_field_name = 'field_' . $conn->fetchOne($field_id . "
+              AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(categories::jsonb) AS category WHERE category = :category)
+        ", $params + ['entity_field' => 'nomeCompleto', 'category' => $registration->category]);
+
+        $update_field = 'UPDATE registration_meta SET value = :value WHERE object_id = :registration_id AND key = :field_name';
+
+        $conn->executeStatement($update_field, ['value' => $cnpj, 'registration_id' => $registration->id, 'field_name' => $cnpj_field_name]);
+        $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $cnpj_field_name));
+
+        $conn->executeStatement($update_field, ['value' => $full_name, 'registration_id' => $registration->id, 'field_name' => $full_name_field_name]);
+        $registration->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $full_name_field_name));
+    }
+
+    /**
+     * Grava ou limpa (null) o pedido de alteração de CNPJ da inscrição. Único caminho de escrita do metadado.
+     */
+    public function setRcvCnpjRequest(Registration $registration, ?array $request): void
+    {
+        $this->rcvCnpjRequestWritable = true;
+
+        try {
+            $registration->rcv_cnpj_solicitado = $request;
+        } finally {
+            $this->rcvCnpjRequestWritable = false;
+        }
     }
 
     function getCNPJFake($cnpj) {
@@ -3420,6 +3511,29 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
     }
 
     /**
+     * Condição SQL: o agente coletivo (ar) tem o CNPJ :digits ou a inscrição (r) tem um pedido de alteração pendente para ele.
+     * O CNPJ pedido só vai para a organização na aprovação, então sem o pedido a checagem não o enxergaria.
+     */
+    public function rcvColetivoCnpjMatchSql(): string
+    {
+        return "(
+            EXISTS (
+                SELECT 1 FROM agent_meta am
+                WHERE am.object_id = ar.agent_id
+                  AND am.key IN ('cnpj', 'documento')
+                  AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
+            )
+            OR EXISTS (
+                SELECT 1 FROM registration_meta rm
+                WHERE rm.object_id = r.id
+                  AND rm.key = 'rcv_cnpj_solicitado'
+                  -- o CASE garante que só o valor deste metadado passe pelo cast para jsonb
+                  AND regexp_replace(COALESCE(CASE WHEN rm.key = 'rcv_cnpj_solicitado' THEN rm.value::jsonb ->> 'cnpj' END, ''), '[^0-9]', '', 'g') = :digits
+            )
+        )";
+    }
+
+    /**
      * Inscrições na oportunidade Cultura Viva com agente coletivo contendo o CNPJ e a categoria informados (Ponto entidade ou Pontão).
      */
     public function countRcvRegistrationsWithColetivoCnpjAndCategory(
@@ -3450,10 +3564,8 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             INNER JOIN agent_relation ar ON ar.object_id = r.id
                 AND ar.object_type = '{$registrationObjectType}'
                 AND ar.type = 'coletivo'
-            INNER JOIN agent_meta am ON am.object_id = ar.agent_id
-                AND am.key IN ('cnpj', 'documento')
-                AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
             WHERE r.opportunity_id = :oppId
+              AND {$this->rcvColetivoCnpjMatchSql()}
               AND r.category = :category
               AND r.status > 0
               AND r.status != :notApproved
@@ -3520,12 +3632,10 @@ class Theme extends \MapasCulturais\Themes\BaseV2\Theme
             INNER JOIN agent_relation ar ON ar.object_id = r.id
                 AND ar.object_type = '{$registrationObjectType}'
                 AND ar.type = 'coletivo'
-            INNER JOIN agent_meta am ON am.object_id = ar.agent_id
-                AND am.key IN ('cnpj', 'documento')
-                AND regexp_replace(COALESCE(am.value, ''), '[^0-9]', '', 'g') = :digits
             INNER JOIN agent org ON org.id = ar.agent_id
             LEFT JOIN usr org_user ON org_user.id = org.user_id
             WHERE r.opportunity_id = :oppId
+              AND {$this->rcvColetivoCnpjMatchSql()}
               AND r.status > 0
               AND r.status != :notApproved
             {$sameResponsibleSql}
