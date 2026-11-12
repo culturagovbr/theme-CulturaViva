@@ -153,8 +153,7 @@ $this->import('
                     </div>
 
                     <div class="rcv-certificate__footer-right">
-                        <?php /* Período eleitoral: barra sem marca do governo (original: img/certificate/logos.png). */ ?>
-                        <img src="<?php $this->asset('img/certificate/logo-certificate.png'); ?>" alt="Cultura Viva e Ministério da Cultura" />
+                        <img src="<?php $this->asset('img/certificate/logos.png'); ?>" />
                     </div>
                 </div>
             </div>
