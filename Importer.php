@@ -2021,7 +2021,15 @@ class Importer {
     // -------------------------------------------------------------------------
 
     /**
+     * Retorna o e-mail privado do agente, qualquer que seja o usuário logado, ou, na falta dele, o e-mail do usuário.
+     */
+    private static function agentEmail($agent): ?string {
+        return $agent->getMetadata('emailPrivado') ?: $agent->user->email;
+    }
+
+    /**
      * Envia e-mails de notificação a partir do plano já aplicado.
+     * Tenta enviar todos os e-mails e lança uma exceção com as falhas ao final.
      *
      * @param array $plan ExecutionPlan produzido por buildExecutionPlan() e aplicado por applyExecutionPlan()
      * @return void
@@ -2029,6 +2037,7 @@ class Importer {
      */
     public static function sendEmails(array $plan): void {
         $app = App::i();
+        $failures = [];
 
         foreach ($plan['rows'] as $decision) {
             $e        = $decision['email'];
@@ -2105,28 +2114,40 @@ class Importer {
                     continue 2;
             }
 
-            $app->createAndSendMailMessage([
-                'to'      => $e['to'],
-                'subject' => $subject,
-                'body'    => $app->renderMustacheTemplate($template, $template_data),
-            ]);
+            try {
+                $app->createAndSendMailMessage([
+                    'to'      => $e['to'],
+                    'subject' => $subject,
+                    'body'    => $app->renderMustacheTemplate($template, $template_data),
+                ]);
+            } catch (\Throwable $err) {
+                $failures[] = "linha {$decision['line']}: {$err->getMessage()}";
+            }
         }
 
         // Resumo para o gestor (dono da inscrição PNAB)
         $pnab    = $plan['pnab_registration'];
         $success = count(array_filter($plan['rows'], fn($d) => $d['scenario'] !== null));
 
-        $app->createAndSendMailMessage([
-            'to'      => $pnab->owner->emailPrivado,
-            'subject' => '[Cultura Viva] Importação realizada com sucesso',
-            'body'    => $app->renderMustacheTemplate('import_summary.html', [
-                'siteName'           => $app->siteName,
-                'userName'           => $pnab->owner->name,
-                'registrationNumber' => $pnab->number,
-                'totalRows'          => $plan['total_rows'],
-                'successRows'        => $success,
-            ]),
-        ]);
+        try {
+            $app->createAndSendMailMessage([
+                'to'      => self::agentEmail($pnab->owner),
+                'subject' => '[Cultura Viva] Importação realizada com sucesso',
+                'body'    => $app->renderMustacheTemplate('import_summary.html', [
+                    'siteName'           => $app->siteName,
+                    'userName'           => $pnab->owner->name,
+                    'registrationNumber' => $pnab->number,
+                    'totalRows'          => $plan['total_rows'],
+                    'successRows'        => $success,
+                ]),
+            ]);
+        } catch (\Throwable $err) {
+            $failures[] = "resumo do gestor: {$err->getMessage()}";
+        }
+
+        if ($failures) {
+            throw new \Exception(implode(' | ', $failures));
+        }
     }
 
     /**
@@ -2147,7 +2168,7 @@ class Importer {
             'errorMessage'       => $error_message,
         ];
 
-        $to      = $registration->owner->emailPrivado;
+        $to      = self::agentEmail($registration->owner);
         $subject = "[Cultura Viva] A importação da planilha falhou";
         $body    = $app->renderMustacheTemplate('import_error.html', $template_data);
 
